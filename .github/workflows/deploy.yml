@@ -1,0 +1,39 @@
+name: Deploy to Hetzner
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Deploy via SSH to Hetzner
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: www728.your-server.de
+          username: bzipjy
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: 222
+          script: |
+            set -e
+            DEPLOY_DIR="$HOME/html/knxtool"
+
+            # Sicherstellen dass der Ordner existiert
+            mkdir -p "$DEPLOY_DIR"
+
+            # Repo klonen oder aktualisieren
+            if [ -d "$DEPLOY_DIR/.git" ]; then
+              echo "→ Pulling latest changes..."
+              cd "$DEPLOY_DIR"
+              git pull origin main
+            else
+              echo "→ Cloning repository..."
+              git clone https://github.com/zenkel-ai/knxtool.git "$DEPLOY_DIR"
+            fi
+
+            echo "✓ Deployment erfolgreich: knxtool.seed2peak.group"

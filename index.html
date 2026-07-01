@@ -1,0 +1,1078 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Jetplan → KNX Konverter</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #ffffff;
+    --bg-secondary: #f7f7f5;
+    --bg-tertiary: #f0eeea;
+    --text: #1a1a1a;
+    --text-secondary: #666660;
+    --text-tertiary: #999992;
+    --border: rgba(0,0,0,0.12);
+    --border-md: rgba(0,0,0,0.22);
+    --radius-md: 8px;
+    --radius-lg: 12px;
+    --accent: #1a1a1a;
+    --accent-inv: #ffffff;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1c1c1a;
+      --bg-secondary: #242422;
+      --bg-tertiary: #2c2c2a;
+      --text: #f0eeea;
+      --text-secondary: #999992;
+      --text-tertiary: #666660;
+      --border: rgba(255,255,255,0.1);
+      --border-md: rgba(255,255,255,0.2);
+      --accent: #f0eeea;
+      --accent-inv: #1c1c1a;
+    }
+    .badge-lighting { background: #412402 !important; color: #FAC775 !important; }
+    .badge-socket   { background: #042C53 !important; color: #85B7EB !important; }
+    .badge-switch   { background: #173404 !important; color: #C0DD97 !important; }
+    .badge-smarthome{ background: #26215C !important; color: #CECBF6 !important; }
+    .badge-data     { background: #04342C !important; color: #9FE1CB !important; }
+    .badge-distribution { background: #2C2C2A !important; color: #D3D1C7 !important; }
+    .rec-high  { background: #501313 !important; color: #F7C1C1 !important; }
+    .rec-medium{ background: #412402 !important; color: #FAC775 !important; }
+    .rec-low   { background: #173404 !important; color: #C0DD97 !important; }
+  }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    background: var(--bg-tertiary);
+    color: var(--text);
+    min-height: 100vh;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+
+  .app-shell {
+    max-width: 1100px;
+    margin: 2rem auto;
+    background: var(--bg);
+    border-radius: var(--radius-lg);
+    border: 0.5px solid var(--border);
+    overflow: hidden;
+    box-shadow: 0 2px 20px rgba(0,0,0,0.08);
+  }
+
+  /* Header */
+  .header {
+    padding: 1.5rem 2rem 1.25rem;
+    border-bottom: 0.5px solid var(--border);
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+  .header-left h1 { font-size: 18px; font-weight: 500; margin-bottom: 3px; }
+  .header-left p  { font-size: 12px; color: var(--text-secondary); }
+  .header-badge {
+    font-size: 11px;
+    padding: 3px 10px;
+    border-radius: 20px;
+    background: var(--bg-secondary);
+    border: 0.5px solid var(--border);
+    color: var(--text-secondary);
+    white-space: nowrap;
+    align-self: center;
+  }
+
+  /* Tabs */
+  .tabs {
+    display: flex;
+    border-bottom: 0.5px solid var(--border);
+    padding: 0 2rem;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tab {
+    padding: 10px 16px;
+    font-size: 13px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -0.5px;
+    white-space: nowrap;
+    transition: color 0.15s;
+    user-select: none;
+  }
+  .tab.active { color: var(--text); border-bottom-color: var(--text); font-weight: 500; }
+  .tab:hover:not(.active) { color: var(--text); }
+
+  /* Content */
+  .content { padding: 1.75rem 2rem; }
+  .panel { display: none; }
+  .panel.active { display: block; }
+
+  /* Upload */
+  .upload-zone {
+    border: 1.5px dashed var(--border-md);
+    border-radius: var(--radius-lg);
+    padding: 4rem 2rem;
+    text-align: center;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+    background: var(--bg-secondary);
+  }
+  .upload-zone:hover, .upload-zone.dragover {
+    background: var(--bg-tertiary);
+    border-color: var(--text-secondary);
+  }
+  .upload-icon { margin: 0 auto 1.25rem; opacity: 0.35; color: var(--text); }
+  .upload-zone h2 { font-size: 16px; font-weight: 500; margin-bottom: 6px; }
+  .upload-zone p  { font-size: 13px; color: var(--text-secondary); }
+  .upload-hint    { margin-top: 1.5rem; font-size: 12px; color: var(--text-tertiary); }
+
+  /* Buttons */
+  .btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 7px 14px;
+    border: 0.5px solid var(--border-md);
+    border-radius: var(--radius-md);
+    font-size: 13px; font-weight: 400;
+    background: transparent; color: var(--text);
+    cursor: pointer;
+    transition: background 0.1s, transform 0.1s;
+  }
+  .btn:hover { background: var(--bg-secondary); }
+  .btn:active { transform: scale(0.98); }
+  .btn-primary {
+    background: var(--accent); color: var(--accent-inv);
+    border-color: transparent;
+  }
+  .btn-primary:hover { opacity: 0.85; background: var(--accent); }
+  .btn-sm { padding: 5px 10px; font-size: 12px; }
+
+  /* Stats grid */
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+    gap: 10px;
+    margin-bottom: 1.75rem;
+  }
+  .stat-card {
+    background: var(--bg-secondary);
+    border-radius: var(--radius-md);
+    padding: 12px 14px;
+  }
+  .stat-label { font-size: 10px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; }
+  .stat-value { font-size: 24px; font-weight: 500; }
+  .stat-value.sm { font-size: 15px; padding-top: 3px; }
+  .stat-sub   { font-size: 11px; color: var(--text-secondary); margin-top: 2px; }
+
+  /* Section headings */
+  .section-title {
+    font-size: 13px; font-weight: 500;
+    color: var(--text);
+    margin-bottom: 10px;
+    margin-top: 1.75rem;
+  }
+  .section-title:first-child { margin-top: 0; }
+
+  /* Progress bars */
+  .progress-bar  { height: 3px; background: var(--border); border-radius: 2px; overflow: hidden; margin: 5px 0; }
+  .progress-fill { height: 100%; border-radius: 2px; background: var(--text-secondary); transition: width 0.4s; }
+
+  /* Floor filter pills */
+  .floor-filter { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 1rem; }
+  .floor-btn {
+    padding: 4px 12px;
+    border: 0.5px solid var(--border);
+    border-radius: 20px;
+    font-size: 12px;
+    background: transparent;
+    cursor: pointer;
+    color: var(--text-secondary);
+    transition: all 0.1s;
+  }
+  .floor-btn.active {
+    background: var(--accent); color: var(--accent-inv);
+    border-color: transparent;
+  }
+  .floor-btn:hover:not(.active) { border-color: var(--border-md); color: var(--text); }
+
+  /* Tables */
+  .table-wrap {
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    overflow-x: auto;
+    margin-bottom: 1.5rem;
+  }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 500px; }
+  th {
+    padding: 8px 12px;
+    text-align: left;
+    font-size: 10px; font-weight: 500;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    background: var(--bg-secondary);
+    border-bottom: 0.5px solid var(--border);
+    white-space: nowrap;
+  }
+  td {
+    padding: 8px 12px;
+    color: var(--text);
+    border-bottom: 0.5px solid var(--border);
+    vertical-align: middle;
+  }
+  tr:last-child td { border-bottom: none; }
+  tbody tr:hover td { background: var(--bg-secondary); }
+
+  /* Badges */
+  .badge {
+    display: inline-flex; align-items: center;
+    padding: 2px 8px;
+    border-radius: 20px;
+    font-size: 11px; font-weight: 500;
+  }
+  .badge-lighting     { background: #FAEEDA; color: #633806; }
+  .badge-socket       { background: #E6F1FB; color: #0C447C; }
+  .badge-switch       { background: #EAF3DE; color: #27500A; }
+  .badge-smarthome    { background: #EEEDFE; color: #3C3489; }
+  .badge-data         { background: #E1F5EE; color: #085041; }
+  .badge-distribution { background: #F1EFE8; color: #444441; }
+
+  /* Recommendations */
+  .recommendation {
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 14px 16px;
+    margin-bottom: 10px;
+    display: flex;
+    gap: 12px;
+  }
+  .rec-icon {
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    margin-top: 1px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 700;
+  }
+  .rec-high   { background: #FCEBEB; color: #A32D2D; }
+  .rec-medium { background: #FAEEDA; color: #854F0B; }
+  .rec-low    { background: #EAF3DE; color: #3B6D11; }
+  .rec-title  { font-size: 13px; font-weight: 500; margin-bottom: 4px; }
+  .rec-text   { font-size: 12px; color: var(--text-secondary); line-height: 1.6; }
+
+  /* AI box */
+  .ai-box {
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 1rem 1.25rem;
+    background: var(--bg-secondary);
+    margin-bottom: 1.75rem;
+  }
+  .ai-header {
+    display: flex; align-items: center; gap: 8px;
+    margin-bottom: 12px;
+  }
+  .ai-header span { font-size: 13px; font-weight: 500; }
+  .ai-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: #1D9E75;
+    flex-shrink: 0;
+  }
+  .ai-dot.thinking { background: #EF9F27; animation: pulse 1s infinite; }
+  .ai-dot.error    { background: #E24B4A; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+  #ai-output {
+    font-size: 13px; line-height: 1.7;
+    color: var(--text);
+    white-space: pre-wrap;
+    min-height: 50px;
+  }
+  #ai-output.placeholder { color: var(--text-tertiary); font-style: italic; }
+
+  /* Export cards */
+  .export-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+    gap: 12px;
+  }
+  .export-card {
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 1.25rem;
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  .export-card h3 { font-size: 14px; font-weight: 500; }
+  .export-card p  { font-size: 12px; color: var(--text-secondary); line-height: 1.5; flex: 1; }
+
+  /* API key input */
+  .apikey-row {
+    display: flex; gap: 8px; align-items: center;
+    margin-bottom: 12px;
+  }
+  .apikey-row input {
+    flex: 1;
+    padding: 7px 10px;
+    border: 0.5px solid var(--border-md);
+    border-radius: var(--radius-md);
+    font-size: 13px;
+    background: var(--bg);
+    color: var(--text);
+    font-family: monospace;
+  }
+  .apikey-row input:focus { outline: none; border-color: var(--text-secondary); }
+  .apikey-note { font-size: 11px; color: var(--text-tertiary); margin-bottom: 10px; }
+
+  code {
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 11px;
+    color: var(--text-secondary);
+  }
+
+  .divider { border: none; border-top: 0.5px solid var(--border); margin: 1.5rem 0; }
+</style>
+</head>
+<body>
+
+<div class="app-shell">
+
+  <!-- Header -->
+  <div class="header">
+    <div class="header-left">
+      <h1>Jetplan → KNX Konverter</h1>
+      <p>Analysiert Stromlaufpläne und generiert KNX-Projektdaten mit intelligenten Empfehlungen</p>
+    </div>
+    <div class="header-badge" id="project-badge">Kein Projekt geladen</div>
+  </div>
+
+  <!-- Upload Panel -->
+  <div id="upload-panel" style="padding:2rem;">
+    <div class="upload-zone" id="drop-zone">
+      <svg class="upload-icon" width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M24 32V16M16 24l8-8 8 8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M10 34C7 32.6 4 29.4 4 25.5 4 20 8.5 16 14 16c.7 0 1.3.07 2 .2C17.8 12.3 21.6 10 26 10c6 0 11 5 11 11h.5C41.5 21 44 23.5 44 27s-2.5 7-7.5 7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      </svg>
+      <h2>Jetplan JSON Datei laden</h2>
+      <p>Hierher ziehen oder klicken zum Auswählen</p>
+      <input type="file" id="file-input" accept=".json" style="display:none">
+      <p class="upload-hint">Unterstützt: Jetplan Stromlaufplan-Export (JSON)</p>
+    </div>
+  </div>
+
+  <!-- Main App (hidden until file loaded) -->
+  <div id="main-panel" style="display:none;">
+    <div class="tabs" id="tabs">
+      <div class="tab active" data-tab="overview">Übersicht</div>
+      <div class="tab" data-tab="groups">Schaltgruppen</div>
+      <div class="tab" data-tab="devices">Geräteliste</div>
+      <div class="tab" data-tab="recommendations">KNX-Empfehlungen</div>
+      <div class="tab" data-tab="export">Export</div>
+    </div>
+
+    <div class="content">
+
+      <!-- Overview Tab -->
+      <div class="panel active" id="tab-overview">
+        <div class="stats-grid" id="stats-grid"></div>
+        <div id="floor-overview"></div>
+      </div>
+
+      <!-- Groups Tab -->
+      <div class="panel" id="tab-groups">
+        <div class="floor-filter" id="group-floor-filter"></div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Gruppe</th>
+                <th>Etage</th>
+                <th>Räume</th>
+                <th>Typ</th>
+                <th>Geräte</th>
+                <th>KNX-Adresse</th>
+              </tr>
+            </thead>
+            <tbody id="groups-table"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Devices Tab -->
+      <div class="panel" id="tab-devices">
+        <div class="floor-filter" id="device-floor-filter"></div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Typ</th>
+                <th>Name</th>
+                <th>Etage</th>
+                <th>Raum</th>
+                <th>Sicherung</th>
+                <th>Gruppe(n)</th>
+              </tr>
+            </thead>
+            <tbody id="devices-table"></tbody>
+          </table>
+        </div>
+        <p id="devices-more" style="font-size:12px;color:var(--text-secondary);display:none;"></p>
+      </div>
+
+      <!-- Recommendations Tab -->
+      <div class="panel" id="tab-recommendations">
+        <div class="ai-box">
+          <div class="ai-header">
+            <div class="ai-dot" id="ai-dot"></div>
+            <span>KI-Analyse mit Claude</span>
+            <div style="margin-left:auto;display:flex;gap:8px;align-items:center;">
+              <button class="btn btn-sm" onclick="runAIAnalysis()">&#9654; Analyse starten</button>
+            </div>
+          </div>
+          <div class="apikey-row">
+            <input type="password" id="api-key-input" placeholder="sk-ant-api03-… (Anthropic API Key)">
+            <button class="btn btn-sm" onclick="toggleKeyVis()">Anzeigen</button>
+          </div>
+          <p class="apikey-note">Der API-Key wird nur lokal in dieser Sitzung verwendet und nicht gespeichert. Erhältlich unter console.anthropic.com</p>
+          <div id="ai-output" class="placeholder">Trage deinen Anthropic API-Key ein und klicke auf "Analyse starten"...</div>
+        </div>
+
+        <div class="section-title">Automatische Empfehlungen</div>
+        <div id="static-recommendations"></div>
+      </div>
+
+      <!-- Export Tab -->
+      <div class="panel" id="tab-export">
+        <p style="font-size:13px;color:var(--text-secondary);margin-bottom:1.5rem;">Exportiere das analysierte KNX-Projekt in verschiedene Formate.</p>
+        <div class="export-grid" id="export-grid">
+          <div class="export-card">
+            <h3>ETS-XML Export</h3>
+            <p>KNX-Projektdatei kompatibel mit ETS 5/6. Enthält Gruppenadressenliste und Gerätezuordnungen.</p>
+            <button class="btn btn-primary" onclick="exportETS()">XML herunterladen</button>
+          </div>
+          <div class="export-card">
+            <h3>Gruppenadressenliste</h3>
+            <p>CSV-Export aller KNX-Gruppenadressen mit Bezeichnung, Etage und zugeordneten Geräten.</p>
+            <button class="btn" onclick="exportCSV()">CSV herunterladen</button>
+          </div>
+          <div class="export-card">
+            <h3>Geräteliste komplett</h3>
+            <p>Alle Elemente mit Typ, Etage, Raum, Sicherung und KNX-Gruppe als CSV.</p>
+            <button class="btn" onclick="exportDeviceList()">CSV herunterladen</button>
+          </div>
+          <div class="export-card">
+            <h3>Projektbericht HTML</h3>
+            <p>Druckbarer Bericht mit Zusammenfassung, Gruppenadressenliste und KNX-Empfehlungen.</p>
+            <button class="btn" onclick="exportReport()">HTML herunterladen</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+// ── State ──────────────────────────────────────────────────────────────────
+let PROJECT = null;
+let activeFloorGroup = 'all';
+let activeFloorDevice = 'all';
+
+// ── Constants ──────────────────────────────────────────────────────────────
+const ELEMENT_LABELS = {
+  lighting:     'Beleuchtung',
+  socket:       'Steckdose',
+  switch:       'Schalter',
+  smarthome:    'SmartHome/KNX',
+  data:         'Datennetz',
+  distribution: 'Unterverteiler'
+};
+
+// ── File handling ──────────────────────────────────────────────────────────
+const dropZone  = document.getElementById('drop-zone');
+const fileInput = document.getElementById('file-input');
+
+dropZone.addEventListener('click', () => fileInput.click());
+fileInput.addEventListener('change', e => {
+  const f = e.target.files[0];
+  if (f) readFile(f);
+});
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropZone.classList.remove('dragover');
+  const f = e.dataTransfer.files[0];
+  if (f) readFile(f);
+});
+
+function readFile(file) {
+  const r = new FileReader();
+  r.onload = ev => {
+    try {
+      const json = JSON.parse(ev.target.result);
+      processData(json);
+    } catch (err) {
+      alert('Fehler: Ungültige JSON-Datei.\n' + err.message);
+    }
+  };
+  r.readAsText(file);
+}
+
+// ── Data processing ────────────────────────────────────────────────────────
+function processData(json) {
+  const items   = json.data.outletItems || [];
+  const project = json.data.projects?.[0] || {};
+  const unit    = json.data.units?.[0] || {};
+
+  const byFloor = {};
+  const byType  = {};
+  const byGroup = {};
+
+  for (const item of items) {
+    const floor  = item.level || 'Unbekannt';
+    const type   = item.element?.type || 'other';
+    const room   = item.room || '';
+    const groups = item.groupIds || [];
+
+    if (!byFloor[floor]) byFloor[floor] = [];
+    byFloor[floor].push(item);
+
+    byType[type] = (byType[type] || 0) + 1;
+
+    for (const g of groups) {
+      if (!byGroup[g]) byGroup[g] = { id: g, floor, rooms: new Set(), types: new Set(), items: [] };
+      byGroup[g].items.push(item);
+      byGroup[g].rooms.add(room);
+      byGroup[g].types.add(type);
+    }
+  }
+
+  const groups = Object.values(byGroup).map((g, i) => ({
+    ...g,
+    rooms: [...g.rooms].filter(Boolean),
+    types: [...g.types],
+    knxAddr: generateKNXAddr(g.id, i)
+  }));
+
+  PROJECT = {
+    project, unit, items, byFloor, byType, groups,
+    smarthomeItems:     items.filter(i => i.element?.type === 'smarthome'),
+    lightingItems:      items.filter(i => i.element?.type === 'lighting'),
+    ungroupedLighting:  items.filter(i => i.element?.type === 'lighting' && (!i.groupIds || !i.groupIds.length)),
+    meta: json.meta
+  };
+
+  document.getElementById('upload-panel').style.display = 'none';
+  document.getElementById('main-panel').style.display   = 'block';
+  document.getElementById('project-badge').textContent  =
+    `${project.name || '–'} / ${unit.unitCode || '–'}`;
+
+  renderAll();
+}
+
+function generateKNXAddr(groupId, index) {
+  const floorMap  = { DG: 3, OG: 2, EG: 1, Keller: 0, KE: 0 };
+  const floorKey  = groupId.match(/^([A-Za-z]+)/)?.[1]?.toUpperCase() || 'XX';
+  const num       = groupId.match(/(\d+)$/)?.[1] || (index + 1);
+  const f         = floorMap[floorKey] ?? 9;
+  return `1/${f}/${num}`;
+}
+
+// ── Tab routing ────────────────────────────────────────────────────────────
+document.getElementById('tabs').addEventListener('click', e => {
+  const tab = e.target.closest('.tab');
+  if (!tab) return;
+  const name = tab.dataset.tab;
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  tab.classList.add('active');
+  document.getElementById('tab-' + name).classList.add('active');
+});
+
+// ── Render all ─────────────────────────────────────────────────────────────
+function renderAll() {
+  renderOverview();
+  renderGroups();
+  renderDevices();
+  renderRecommendations();
+}
+
+// ── Overview ───────────────────────────────────────────────────────────────
+function renderOverview() {
+  const d = PROJECT;
+
+  document.getElementById('stats-grid').innerHTML = `
+    <div class="stat-card">
+      <div class="stat-label">Projekt</div>
+      <div class="stat-value sm">${d.project.name || '–'}</div>
+      <div class="stat-sub">${d.unit.unitCode || ''}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Elemente gesamt</div>
+      <div class="stat-value">${d.items.length}</div>
+      <div class="stat-sub">${Object.keys(d.byFloor).length} Etagen</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Schaltgruppen</div>
+      <div class="stat-value">${d.groups.length}</div>
+      <div class="stat-sub">KNX-fähig</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">KNX-Bustaster</div>
+      <div class="stat-value">${d.smarthomeItems.length}</div>
+      <div class="stat-sub">SmartHome</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Beleuchtung</div>
+      <div class="stat-value">${d.byType.lighting || 0}</div>
+      <div class="stat-sub">Leuchten</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Steckdosen</div>
+      <div class="stat-value">${d.byType.socket || 0}</div>
+      <div class="stat-sub">Schuko</div>
+    </div>
+  `;
+
+  let html = '<div class="section-title">Verteilung nach Etage</div>';
+  for (const [floor, items] of Object.entries(d.byFloor)) {
+    const typeCounts = {};
+    items.forEach(i => {
+      const t = i.element?.type || 'other';
+      typeCounts[t] = (typeCounts[t] || 0) + 1;
+    });
+    const pct = Math.round((items.length / d.items.length) * 100);
+    html += `
+      <div style="margin-bottom:16px;">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px;">
+          <span style="font-size:13px;font-weight:500;">${floor}</span>
+          <span style="font-size:12px;color:var(--text-secondary);">${items.length} Elemente</span>
+        </div>
+        <div class="progress-bar"><div class="progress-fill" style="width:${pct}%;"></div></div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:5px;">
+          ${Object.entries(typeCounts).map(([t, c]) =>
+            `<span class="badge badge-${t}">${ELEMENT_LABELS[t] || t}: ${c}</span>`
+          ).join('')}
+        </div>
+      </div>`;
+  }
+  document.getElementById('floor-overview').innerHTML = html;
+}
+
+// ── Groups ─────────────────────────────────────────────────────────────────
+function renderGroups() {
+  const floors = ['all', ...new Set(PROJECT.groups.map(g => g.floor))];
+  document.getElementById('group-floor-filter').innerHTML = floors.map(f =>
+    `<button class="floor-btn ${f === 'all' ? 'active' : ''}" onclick="filterGroups(this,'${f}')">${f === 'all' ? 'Alle Etagen' : f}</button>`
+  ).join('');
+  renderGroupsTable('all');
+}
+
+function filterGroups(btn, floor) {
+  activeFloorGroup = floor;
+  document.querySelectorAll('#group-floor-filter .floor-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderGroupsTable(floor);
+}
+
+function renderGroupsTable(floor) {
+  const groups = floor === 'all' ? PROJECT.groups : PROJECT.groups.filter(g => g.floor === floor);
+  document.getElementById('groups-table').innerHTML = groups.map(g => `
+    <tr>
+      <td><strong>${g.id}</strong></td>
+      <td>${g.floor}</td>
+      <td style="font-size:12px;color:var(--text-secondary);max-width:220px;">${g.rooms.join(', ') || '–'}</td>
+      <td>${g.types.map(t => `<span class="badge badge-${t}">${ELEMENT_LABELS[t] || t}</span>`).join(' ')}</td>
+      <td style="font-weight:500;">${g.items.length}</td>
+      <td><code>${g.knxAddr}</code></td>
+    </tr>
+  `).join('');
+}
+
+// ── Devices ────────────────────────────────────────────────────────────────
+function renderDevices() {
+  const floors = ['all', ...new Set(PROJECT.items.map(i => i.level).filter(Boolean))];
+  document.getElementById('device-floor-filter').innerHTML = floors.map(f =>
+    `<button class="floor-btn ${f === 'all' ? 'active' : ''}" onclick="filterDevices(this,'${f}')">${f === 'all' ? 'Alle Etagen' : f}</button>`
+  ).join('');
+  renderDevicesTable('all');
+}
+
+function filterDevices(btn, floor) {
+  activeFloorDevice = floor;
+  document.querySelectorAll('#device-floor-filter .floor-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderDevicesTable(floor);
+}
+
+function renderDevicesTable(floor) {
+  const LIMIT = 300;
+  const items = floor === 'all' ? PROJECT.items : PROJECT.items.filter(i => i.level === floor);
+  const show  = items.slice(0, LIMIT);
+  document.getElementById('devices-table').innerHTML = show.map(item => {
+    const type = item.element?.type || 'other';
+    return `
+      <tr>
+        <td><span class="badge badge-${type}">${ELEMENT_LABELS[type] || type}</span></td>
+        <td style="font-size:12px;">${item.element?.name || '–'}</td>
+        <td>${item.level || '–'}</td>
+        <td style="font-size:12px;">${item.room || '–'}</td>
+        <td><code>${item.fuse || '–'}</code></td>
+        <td style="font-size:11px;color:var(--text-secondary);">${(item.groupIds || []).join(', ') || '–'}</td>
+      </tr>`;
+  }).join('');
+  const moreEl = document.getElementById('devices-more');
+  if (items.length > LIMIT) {
+    moreEl.style.display = 'block';
+    moreEl.textContent   = `+ ${items.length - LIMIT} weitere Elemente (im CSV-Export enthalten)`;
+  } else {
+    moreEl.style.display = 'none';
+  }
+}
+
+// ── Recommendations ────────────────────────────────────────────────────────
+function renderRecommendations() {
+  const d = PROJECT;
+  const recs = [];
+
+  // 1. Ungrouped lighting
+  if (d.ungroupedLighting.length > 0) {
+    const rooms = [...new Set(d.ungroupedLighting.map(i => i.room))].filter(Boolean);
+    recs.push({
+      level: 'high',
+      title: `${d.ungroupedLighting.length} Leuchten ohne Schaltgruppe`,
+      text: `In den Räumen ${rooms.slice(0, 4).join(', ')}${rooms.length > 4 ? ' u.a.' : ''} befinden sich Leuchten ohne Gruppen-ID. Diese können per KNX nicht angesteuert werden. Empfehlung: Gruppen-IDs zuweisen und KNX-Schaltaktoren einplanen (z.B. MDT AMS-0816.02, 8-fach 16A).`
+    });
+  }
+
+  // 2. Mixed conventional + KNX
+  const conventionalSwitches = d.items.filter(i => i.element?.type === 'switch');
+  if (d.smarthomeItems.length > 0 && conventionalSwitches.length > 0) {
+    recs.push({
+      level: 'medium',
+      title: `Mischbetrieb: ${d.smarthomeItems.length} KNX-Taster + ${conventionalSwitches.length} konventionelle Schalter`,
+      text: 'Für ein vollständig integriertes KNX-System sollten konventionelle Wechselschalter durch KNX-Bustaster ersetzt werden (z.B. MDT BE-GT2TW.01 Glas-Taster). Alternativ können konventionelle Schalter per Binäreingang (z.B. MDT BE-04230.02) in KNX eingebunden werden.'
+    });
+  }
+
+  // 3. Floors without KNX
+  const floorsWithKNX    = new Set(d.smarthomeItems.map(i => i.level));
+  const floorsWithoutKNX = Object.keys(d.byFloor).filter(f => !floorsWithKNX.has(f));
+  if (floorsWithoutKNX.length > 0) {
+    recs.push({
+      level: 'medium',
+      title: `Etage(n) ohne KNX-Komponenten: ${floorsWithoutKNX.join(', ')}`,
+      text: `In ${floorsWithoutKNX.join(', ')} sind keine KNX-Bustaster geplant. Für vollständige Integration KNX-Bustaster hinzufügen. Pro Etage einen KNX-Linienkoppler einplanen (z.B. ABB LK/S 4.2) um die KNX-Linientopologie korrekt aufzubauen.`
+    });
+  }
+
+  // 4. Multi-group rooms → scene control
+  const roomGroups = {};
+  d.items.filter(i => i.element?.type === 'lighting').forEach(i => {
+    if (!roomGroups[i.room]) roomGroups[i.room] = new Set();
+    (i.groupIds || []).forEach(g => roomGroups[i.room].add(g));
+  });
+  const multiGroupRooms = Object.entries(roomGroups).filter(([, gs]) => gs.size > 1);
+  if (multiGroupRooms.length > 0) {
+    recs.push({
+      level: 'low',
+      title: `${multiGroupRooms.length} Räume mit mehreren Lichtgruppen — Szenensteuerung sinnvoll`,
+      text: `Räume wie ${multiGroupRooms.slice(0, 3).map(([r]) => r).join(', ')} haben mehrere Schaltgruppen. Empfehlung: KNX-Szenenbausteine (z.B. MDT SCN-00.01) oder Logikmodule für Lichtszenen einplanen. Spart Gruppenadressen und ermöglicht Stimmungslicht.`
+    });
+  }
+
+  // 5. LED Stripes
+  if (d.items.some(i => i.element?.name === 'ledStripe')) {
+    recs.push({
+      level: 'medium',
+      title: 'LED-Stripes: KNX-Dimmaktor oder DALI-Gateway erforderlich',
+      text: 'LED-Stripes benötigen einen KNX-Dimmaktor (z.B. MDT AKD-0401.02 für 4-Kanal DALI/DSI) oder RGBW-Aktor. Sicherstellen dass Netzteil (12V/24V DC) und Trafo für Phasenanschnitt geeignet sind. Max. Last pro Kanal beachten.'
+    });
+  }
+
+  // 6. IP Router recommendation
+  const dataItems = d.items.filter(i => i.element?.type === 'data');
+  if (dataItems.length > 0) {
+    recs.push({
+      level: 'low',
+      title: 'KNX/IP-Router für Fernzugriff und Visualisierung empfohlen',
+      text: `${dataItems.length} Datendosen vorhanden — das Netzwerk ist bereits vorbereitet. KNX/IP-Router einplanen (z.B. Weinzierl KNX IP Router 752) für ETS-Fernprogrammierung, Smartphone-App und Smart-Home-Integration (z.B. Home Assistant, KNX-Plugin).`
+    });
+  }
+
+  // 7. Large floors → line coupler
+  const groupsPerFloor = {};
+  d.groups.forEach(g => { groupsPerFloor[g.floor] = (groupsPerFloor[g.floor] || 0) + 1; });
+  Object.entries(groupsPerFloor).forEach(([floor, count]) => {
+    if (count > 8) {
+      recs.push({
+        level: 'medium',
+        title: `${floor}: ${count} Schaltgruppen — Linientopologie prüfen`,
+        text: `${floor} hat ${count} KNX-Schaltgruppen. KNX-Linie: max. 64 Teilnehmer. Für diese Etage ausreichend Schaltaktoren einplanen (z.B. MDT AMS-1216.02 mit 12 × 16A-Ausgängen). KNX-Linienkoppler bei mehr als einer Etage oder >50 Geräten pro Linie erforderlich.`
+      });
+    }
+  });
+
+  // 8. Energy management
+  const socketCount = d.byType.socket || 0;
+  if (socketCount > 10) {
+    recs.push({
+      level: 'low',
+      title: 'Energiemessung: KNX-Energiemessgeräte für Hauptstromkreise',
+      text: `Mit ${socketCount} Steckdosen und mehreren Beleuchtungsgruppen lohnt sich eine KNX-Energiemessung. Empfehlung: KNX-Energiezähler pro Unterverteiler (z.B. ABB EMS 1.0.1) für Verbrauchsmonitoring und automatische Lastabwurfschaltungen.`
+    });
+  }
+
+  const levelIcon = { high: '!', medium: '~', low: 'i' };
+  document.getElementById('static-recommendations').innerHTML = recs.length
+    ? recs.map(r => `
+        <div class="recommendation">
+          <div class="rec-icon rec-${r.level}">${levelIcon[r.level]}</div>
+          <div>
+            <div class="rec-title">${r.title}</div>
+            <div class="rec-text">${r.text}</div>
+          </div>
+        </div>`).join('')
+    : '<p style="color:var(--text-secondary);font-size:13px;">Keine automatischen Empfehlungen gefunden.</p>';
+}
+
+// ── AI Analysis ────────────────────────────────────────────────────────────
+function toggleKeyVis() {
+  const inp = document.getElementById('api-key-input');
+  inp.type  = inp.type === 'password' ? 'text' : 'password';
+}
+
+async function runAIAnalysis() {
+  if (!PROJECT) return;
+
+  const apiKey = document.getElementById('api-key-input').value.trim();
+  if (!apiKey) {
+    alert('Bitte zuerst den Anthropic API-Key eingeben.');
+    return;
+  }
+
+  const dot    = document.getElementById('ai-dot');
+  const output = document.getElementById('ai-output');
+  dot.className       = 'ai-dot thinking';
+  output.className    = 'placeholder';
+  output.textContent  = 'Analysiere mit Claude… (kann 10–20 Sekunden dauern)';
+
+  const d = PROJECT;
+  const summary = {
+    projekt:               d.project.name,
+    einheit:               d.unit.unitCode,
+    etagen:                Object.keys(d.byFloor),
+    elementeNachTyp:       d.byType,
+    schaltgruppen:         d.groups.length,
+    knxBustaster:          d.smarthomeItems.length,
+    ungruppierteLeuchtung: d.ungroupedLighting.length,
+    raeume:                [...new Set(d.items.map(i => i.room).filter(Boolean))],
+    gruppenDetails:        d.groups.slice(0, 25).map(g => ({
+      id: g.id, etage: g.floor, raeume: g.rooms.slice(0, 4), geraeteAnzahl: g.items.length, typen: g.types
+    }))
+  };
+
+  const prompt = `Du bist ein erfahrener KNX-Elektroingenieur und Planungsspezialist. Analysiere diesen Jetplan-Stromlaufplan und gib konkrete KNX-Empfehlungen auf Deutsch.
+
+Projektdaten (aus Jetplan-Export):
+${JSON.stringify(summary, null, 2)}
+
+Erstelle eine strukturierte technische Analyse mit folgenden Abschnitten:
+
+## 1. Bewertung der KNX-Eignung
+Kurze Einschätzung des Plans (2–3 Sätze).
+
+## 2. Empfohlene KNX-Komponenten
+Top 5 konkrete Komponenten mit:
+- Funktion im Projekt
+- Produktbeispiel (Hersteller, Bestellnummer)
+- Warum hier notwendig
+
+## 3. Empfohlene Gruppenadressenstruktur
+Schlage eine sinnvolle Struktur vor:
+- Hauptgruppe X/–/– : [Funktion]
+  - Mittelgruppe X/Y/– : [Etage/Bereich]
+    - X/Y/Z : Konkrete Gruppe
+
+## 4. Fehlende oder ergänzende Komponenten
+Was fehlt noch für ein vollständiges KNX-System?
+
+## 5. Energiemanagement-Potential
+Welche Einsparungen sind realistisch? Welche KNX-Funktionen helfen?
+
+Antworte technisch präzise, max. 500 Wörter. Verwende Fachbegriffe korrekt.`;
+
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type':      'application/json',
+        'x-api-key':         apiKey,
+        'anthropic-version': '2023-06-01'
+      },
+      body: JSON.stringify({
+        model:      'claude-sonnet-4-20250514',
+        max_tokens: 1200,
+        messages:   [{ role: 'user', content: prompt }]
+      })
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error?.message || `HTTP ${res.status}`);
+    }
+
+    const data = await res.json();
+    const text = data.content?.find(b => b.type === 'text')?.text || 'Keine Antwort erhalten.';
+    output.className   = '';
+    output.textContent = text;
+    dot.className      = 'ai-dot';
+    dot.style.background = '#1D9E75';
+
+  } catch (err) {
+    output.className   = '';
+    output.textContent = `Fehler: ${err.message}\n\nBitte API-Key prüfen und erneut versuchen.`;
+    dot.className      = 'ai-dot error';
+  }
+}
+
+// ── Exports ────────────────────────────────────────────────────────────────
+function download(filename, content, type) {
+  const a = document.createElement('a');
+  a.href  = URL.createObjectURL(new Blob([content], { type }));
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
+
+function exportCSV() {
+  let csv = '\uFEFF'; // BOM für Excel
+  csv += 'KNX-Adresse,Gruppen-ID,Etage,Räume,Typen,Anzahl Geräte\n';
+  PROJECT.groups.forEach(g => {
+    csv += `"${g.knxAddr}","${g.id}","${g.floor}","${g.rooms.join('; ')}","${g.types.join('/')}",${g.items.length}\n`;
+  });
+  download('knx-gruppenadressen.csv', csv, 'text/csv;charset=utf-8');
+}
+
+function exportDeviceList() {
+  let csv = '\uFEFF';
+  csv += 'Typ,Name,Etage,Raum,Sicherung,Gruppen\n';
+  PROJECT.items.forEach(i => {
+    csv += `"${i.element?.type || ''}","${i.element?.name || ''}","${i.level}","${i.room || ''}","${i.fuse || ''}","${(i.groupIds || []).join('; ')}"\n`;
+  });
+  download('knx-geraete.csv', csv, 'text/csv;charset=utf-8');
+}
+
+function exportETS() {
+  const d   = PROJECT;
+  const now = new Date().toISOString().split('T')[0];
+  let xml = `<?xml version="1.0" encoding="utf-8"?>
+<!-- KNX Gruppenadressenexport – erstellt mit Jetplan KNX Konverter -->
+<!-- Kompatibel mit ETS 5 / ETS 6 (Import über: ETS → Gruppenadressen → Importieren) -->
+<KNX xmlns="http://knx.org/xml/ga-export/01" CreatedBy="Jetplan-KNX-Konverter" ToolVersion="1.0">
+  <Project Name="${escXml(d.project.name)}" LastModified="${now}" ProjectNumber="1">
+    <GroupAddresses>\n`;
+
+  const floors = [...new Set(d.groups.map(g => g.floor))];
+  floors.forEach((floor, fi) => {
+    const floorGroups = d.groups.filter(g => g.floor === floor);
+    xml += `      <GroupRange Name="${escXml(floor)}" Address="${fi + 1}">\n`;
+    floorGroups.forEach(g => {
+      const desc = `${g.id}: ${g.rooms.slice(0, 3).join(', ')}`;
+      xml += `        <GroupAddress Name="${escXml(g.id)}" Address="${escXml(g.knxAddr)}" Description="${escXml(desc)}" DPTs="DPT-1" />\n`;
+    });
+    xml += `      </GroupRange>\n`;
+  });
+
+  xml += `    </GroupAddresses>\n  </Project>\n</KNX>`;
+  download(`knx-projekt-${d.project.name || 'export'}.xml`, xml, 'application/xml;charset=utf-8');
+}
+
+function escXml(s) {
+  return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function exportReport() {
+  const d = PROJECT;
+  const date = new Date().toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
+
+  const groupRows = d.groups.map(g => `
+    <tr>
+      <td>${g.knxAddr}</td>
+      <td>${g.id}</td>
+      <td>${g.floor}</td>
+      <td>${g.rooms.join(', ') || '–'}</td>
+      <td>${g.types.map(t => ELEMENT_LABELS[t] || t).join(', ')}</td>
+      <td>${g.items.length}</td>
+    </tr>`).join('');
+
+  const html = `<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<title>KNX Projektbericht – ${d.project.name}</title>
+<style>
+  body { font-family: -apple-system, sans-serif; max-width: 960px; margin: 2rem auto; color: #111; font-size: 14px; line-height: 1.6; padding: 0 1rem; }
+  h1 { font-size: 22px; font-weight: 500; margin-bottom: 4px; }
+  h2 { font-size: 16px; font-weight: 500; margin-top: 2.5rem; margin-bottom: 10px; border-bottom: 1px solid #e5e5e5; padding-bottom: 6px; }
+  .meta { color: #666; font-size: 13px; margin-bottom: 2rem; }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin-bottom: 1.5rem; }
+  .stat { background: #f7f7f5; border-radius: 8px; padding: 12px; }
+  .stat-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: #999; margin-bottom: 4px; }
+  .stat-value { font-size: 22px; font-weight: 500; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { padding: 7px 10px; text-align: left; background: #f7f7f5; border-bottom: 1px solid #e5e5e5; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: #666; }
+  td { padding: 7px 10px; border-bottom: 1px solid #f0f0f0; }
+  @media print { body { margin: 1cm; } .no-print { display: none; } }
+</style>
+</head>
+<body>
+  <h1>KNX Projektbericht</h1>
+  <p class="meta">Projekt: <strong>${d.project.name}</strong> / ${d.unit.unitCode} &nbsp;·&nbsp; Erstellt: ${date}</p>
+
+  <div class="stats">
+    <div class="stat"><div class="stat-label">Elemente</div><div class="stat-value">${d.items.length}</div></div>
+    <div class="stat"><div class="stat-label">Etagen</div><div class="stat-value">${Object.keys(d.byFloor).length}</div></div>
+    <div class="stat"><div class="stat-label">KNX-Gruppen</div><div class="stat-value">${d.groups.length}</div></div>
+    <div class="stat"><div class="stat-label">KNX-Taster</div><div class="stat-value">${d.smarthomeItems.length}</div></div>
+    <div class="stat"><div class="stat-label">Leuchten</div><div class="stat-value">${d.byType.lighting || 0}</div></div>
+    <div class="stat"><div class="stat-label">Steckdosen</div><div class="stat-value">${d.byType.socket || 0}</div></div>
+  </div>
+
+  <h2>Gruppenadressenliste</h2>
+  <table>
+    <thead><tr><th>KNX-Adresse</th><th>Gruppe</th><th>Etage</th><th>Räume</th><th>Typ</th><th>Geräte</th></tr></thead>
+    <tbody>${groupRows}</tbody>
+  </table>
+
+  <h2>Elementverteilung nach Etage</h2>
+  <table>
+    <thead><tr><th>Etage</th><th>Beleuchtung</th><th>Steckdosen</th><th>Schalter</th><th>KNX</th><th>Daten</th><th>Gesamt</th></tr></thead>
+    <tbody>
+    ${Object.entries(d.byFloor).map(([floor, items]) => {
+      const tc = {};
+      items.forEach(i => { const t = i.element?.type||'other'; tc[t]=(tc[t]||0)+1; });
+      return `<tr><td><strong>${floor}</strong></td><td>${tc.lighting||0}</td><td>${tc.socket||0}</td><td>${tc.switch||0}</td><td>${tc.smarthome||0}</td><td>${tc.data||0}</td><td>${items.length}</td></tr>`;
+    }).join('')}
+    </tbody>
+  </table>
+
+  <p style="margin-top:3rem;font-size:11px;color:#999;">Erstellt mit Jetplan → KNX Konverter &nbsp;·&nbsp; ${date}</p>
+</body>
+</html>`;
+
+  download(`knx-bericht-${d.project.name || 'projekt'}.html`, html, 'text/html;charset=utf-8');
+}
+</script>
+</body>
+</html>
