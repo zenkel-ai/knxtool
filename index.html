@@ -41,6 +41,11 @@
     .badge-smarthome{ background: #26215C !important; color: #CECBF6 !important; }
     .badge-data     { background: #04342C !important; color: #9FE1CB !important; }
     .badge-distribution { background: #2C2C2A !important; color: #D3D1C7 !important; }
+    .badge-terminal { background: #3A2C12 !important; color: #E8C994 !important; }
+    .badge-lightningProtection { background: #3A1414 !important; color: #F0B8B8 !important; }
+    .badge-dimmen   { background: #4A2E02 !important; color: #FFCE8A !important; }
+    .badge-jalousie { background: #143A2E !important; color: #8FE0C4 !important; }
+    .badge-messen   { background: #1C3A14 !important; color: #B7E894 !important; }
     .rec-high  { background: #501313 !important; color: #F7C1C1 !important; }
     .rec-medium{ background: #412402 !important; color: #FAC775 !important; }
     .rec-low   { background: #173404 !important; color: #C0DD97 !important; }
@@ -244,6 +249,11 @@
   .badge-smarthome    { background: #EEEDFE; color: #3C3489; }
   .badge-data         { background: #E1F5EE; color: #085041; }
   .badge-distribution { background: #F1EFE8; color: #444441; }
+  .badge-terminal     { background: #F5EBD6; color: #6B4E14; }
+  .badge-lightningProtection { background: #FBE7E7; color: #8C2020; }
+  .badge-dimmen       { background: #FDEBD0; color: #7A4A05; }
+  .badge-jalousie     { background: #DFF5EC; color: #0B5E44; }
+  .badge-messen       { background: #E6F5DA; color: #305C0F; }
 
   /* Recommendations */
   .recommendation {
@@ -339,6 +349,97 @@
   }
 
   .divider { border: none; border-top: 0.5px solid var(--border); margin: 1.5rem 0; }
+
+  /* Table toolbar (search + add) */
+  .table-toolbar {
+    display: flex; gap: 8px; align-items: center;
+    margin-bottom: 10px; flex-wrap: wrap;
+  }
+  .table-toolbar input[type="search"] {
+    flex: 1; min-width: 160px;
+    padding: 6px 10px;
+    border: 0.5px solid var(--border-md);
+    border-radius: var(--radius-md);
+    font-size: 13px;
+    background: var(--bg);
+    color: var(--text);
+  }
+  .table-toolbar input[type="search"]:focus { outline: none; border-color: var(--text-secondary); }
+
+  /* Sortable headers */
+  th.sortable { cursor: pointer; user-select: none; }
+  th.sortable:hover { color: var(--text); }
+  th.sortable .sort-arrow { display: inline-block; width: 10px; opacity: 0.5; }
+  th.sortable.sort-asc .sort-arrow::after  { content: '▲'; opacity: 1; }
+  th.sortable.sort-desc .sort-arrow::after { content: '▼'; opacity: 1; }
+
+  .row-actions { display: flex; gap: 4px; white-space: nowrap; }
+  .icon-btn {
+    border: 0.5px solid var(--border);
+    background: transparent;
+    color: var(--text-secondary);
+    border-radius: 6px;
+    padding: 3px 7px;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .icon-btn:hover { background: var(--bg-secondary); color: var(--text); }
+
+  .empty-state { padding: 1.5rem; text-align: center; color: var(--text-secondary); font-size: 13px; }
+
+  /* Modal */
+  .modal-overlay {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.4);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 100;
+    padding: 1rem;
+  }
+  .modal-box {
+    background: var(--bg);
+    border-radius: var(--radius-lg);
+    border: 0.5px solid var(--border);
+    width: 100%; max-width: 480px;
+    max-height: 90vh;
+    overflow-y: auto;
+    padding: 1.5rem;
+  }
+  .modal-box h3 { font-size: 15px; font-weight: 500; margin-bottom: 14px; }
+  .form-row { margin-bottom: 12px; }
+  .form-row label {
+    display: block; font-size: 11px; font-weight: 500;
+    text-transform: uppercase; letter-spacing: 0.05em;
+    color: var(--text-secondary); margin-bottom: 5px;
+  }
+  .form-row input, .form-row select {
+    width: 100%;
+    padding: 7px 10px;
+    border: 0.5px solid var(--border-md);
+    border-radius: var(--radius-md);
+    font-size: 13px;
+    background: var(--bg);
+    color: var(--text);
+  }
+  .form-row input:focus, .form-row select:focus { outline: none; border-color: var(--text-secondary); }
+  .form-row .hint { font-size: 11px; color: var(--text-tertiary); margin-top: 4px; }
+  .modal-actions { display: flex; justify-content: space-between; gap: 8px; margin-top: 1.5rem; }
+  .modal-actions .left  { display: flex; gap: 8px; }
+  .modal-actions .right { display: flex; gap: 8px; }
+
+  .autosave-banner {
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--bg-secondary);
+    padding: 12px 14px;
+    margin-bottom: 1.5rem;
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 10px; flex-wrap: wrap;
+  }
+  .autosave-banner p { font-size: 12px; color: var(--text-secondary); }
+
+  .knx-addr-list { display: flex; flex-direction: column; gap: 2px; }
+  .knx-addr-list span { font-size: 11px; color: var(--text-secondary); }
+  .knx-addr-list code { color: var(--text); }
 </style>
 </head>
 <body>
@@ -356,6 +457,13 @@
 
   <!-- Upload Panel -->
   <div id="upload-panel" style="padding:2rem;">
+    <div class="autosave-banner" id="autosave-banner" style="display:none;">
+      <p>Es wurde ein zwischengespeicherter Bearbeitungsstand gefunden.</p>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-sm" onclick="discardAutosave()">Verwerfen</button>
+        <button class="btn btn-primary btn-sm" onclick="resumeAutosave()">Fortsetzen</button>
+      </div>
+    </div>
     <div class="upload-zone" id="drop-zone">
       <svg class="upload-icon" width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
         <path d="M24 32V16M16 24l8-8 8 8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -389,16 +497,20 @@
       <!-- Groups Tab -->
       <div class="panel" id="tab-groups">
         <div class="floor-filter" id="group-floor-filter"></div>
+        <div class="table-toolbar">
+          <input type="search" id="group-search" placeholder="Suchen (Gruppe, Raum, Typ, Adresse …)" oninput="renderGroupsTable(activeFloorGroup)">
+        </div>
         <div class="table-wrap">
           <table>
             <thead>
-              <tr>
-                <th>Gruppe</th>
-                <th>Etage</th>
-                <th>Räume</th>
-                <th>Typ</th>
-                <th>Geräte</th>
-                <th>KNX-Adresse</th>
+              <tr id="groups-thead-row">
+                <th class="sortable" data-key="id">Gruppe <span class="sort-arrow"></span></th>
+                <th class="sortable" data-key="floor">Etage <span class="sort-arrow"></span></th>
+                <th class="sortable" data-key="rooms">Räume <span class="sort-arrow"></span></th>
+                <th class="sortable" data-key="types">Typ</th>
+                <th class="sortable" data-key="function">Funktion <span class="sort-arrow"></span></th>
+                <th class="sortable" data-key="count">Geräte <span class="sort-arrow"></span></th>
+                <th>KNX-Adresse(n)</th>
               </tr>
             </thead>
             <tbody id="groups-table"></tbody>
@@ -409,16 +521,22 @@
       <!-- Devices Tab -->
       <div class="panel" id="tab-devices">
         <div class="floor-filter" id="device-floor-filter"></div>
+        <div class="table-toolbar">
+          <input type="search" id="device-search" placeholder="Suchen (Name, Raum, Sicherung, Gruppe …)" oninput="renderDevicesTable(activeFloorDevice)">
+          <button class="btn btn-sm btn-primary" onclick="openDeviceModal(null)">+ Neues Gerät</button>
+        </div>
         <div class="table-wrap">
           <table>
             <thead>
-              <tr>
-                <th>Typ</th>
-                <th>Name</th>
-                <th>Etage</th>
-                <th>Raum</th>
-                <th>Sicherung</th>
-                <th>Gruppe(n)</th>
+              <tr id="devices-thead-row">
+                <th class="sortable" data-key="type">Typ <span class="sort-arrow"></span></th>
+                <th class="sortable" data-key="function">Funktion <span class="sort-arrow"></span></th>
+                <th class="sortable" data-key="name">Name <span class="sort-arrow"></span></th>
+                <th class="sortable" data-key="level">Etage <span class="sort-arrow"></span></th>
+                <th class="sortable" data-key="room">Raum <span class="sort-arrow"></span></th>
+                <th class="sortable" data-key="fuse">Sicherung <span class="sort-arrow"></span></th>
+                <th class="sortable" data-key="groups">Gruppe(n)</th>
+                <th></th>
               </tr>
             </thead>
             <tbody id="devices-table"></tbody>
@@ -473,9 +591,76 @@
             <p>Druckbarer Bericht mit Zusammenfassung, Gruppenadressenliste und KNX-Empfehlungen.</p>
             <button class="btn" onclick="exportReport()">HTML herunterladen</button>
           </div>
+          <div class="export-card">
+            <h3>Projektstand sichern</h3>
+            <p>Speichert alle Geräte inkl. deiner Änderungen/Ergänzungen als JSON. Kann später wieder per Drag&amp;Drop importiert werden, um weiterzuarbeiten.</p>
+            <button class="btn" onclick="exportProjectState()">JSON herunterladen</button>
+          </div>
         </div>
       </div>
 
+    </div>
+  </div>
+</div>
+
+<!-- Edit/Add Device Modal -->
+<div class="modal-overlay" id="device-modal" style="display:none;" onclick="if(event.target===this) closeDeviceModal()">
+  <div class="modal-box">
+    <h3 id="device-modal-title">Gerät hinzufügen</h3>
+    <input type="hidden" id="dm-id">
+    <div class="form-row">
+      <label>Typ</label>
+      <select id="dm-type" onchange="onDeviceTypeChange()">
+        <option value="lighting">Beleuchtung</option>
+        <option value="socket">Steckdose</option>
+        <option value="switch">Schalter</option>
+        <option value="smarthome">SmartHome/KNX</option>
+        <option value="data">Datennetz</option>
+        <option value="distribution">Unterverteiler</option>
+        <option value="terminal">Anschluss/Sonstiges</option>
+        <option value="lightningProtection">Blitzschutz</option>
+      </select>
+    </div>
+    <div class="form-row">
+      <label>KNX-Funktion</label>
+      <select id="dm-function">
+        <option value="">– keine (nicht KNX-gesteuert) –</option>
+        <option value="schalten">Schalten</option>
+        <option value="dimmen">Dimmen (Licht dimmbar)</option>
+        <option value="jalousie">Jalousie/Rollladen</option>
+        <option value="messen">Schalten + Messen (Energie)</option>
+      </select>
+      <div class="hint">Bestimmt, welche KNX-Gruppenadressen (Schalten/Dimmen/Position …) für die zugeordnete Gruppe erzeugt werden.</div>
+    </div>
+    <div class="form-row">
+      <label>Name/Bezeichnung</label>
+      <input type="text" id="dm-name" placeholder="z.B. einbauSpot, rollladenmotor …">
+    </div>
+    <div class="form-row">
+      <label>Etage</label>
+      <input type="text" id="dm-level" placeholder="z.B. OG">
+    </div>
+    <div class="form-row">
+      <label>Raum</label>
+      <input type="text" id="dm-room" placeholder="z.B. Wohnzimmer OG">
+    </div>
+    <div class="form-row">
+      <label>Sicherung</label>
+      <input type="text" id="dm-fuse" placeholder="z.B. F1.4">
+    </div>
+    <div class="form-row">
+      <label>Gruppen-ID(s)</label>
+      <input type="text" id="dm-groups" placeholder="z.B. OG12, OG13">
+      <div class="hint">Mehrere Gruppen-IDs mit Komma trennen. Leer lassen, falls (noch) keine KNX-Gruppe zugeordnet ist.</div>
+    </div>
+    <div class="modal-actions">
+      <div class="left">
+        <button class="btn btn-sm" id="dm-delete-btn" onclick="deleteDeviceFromModal()" style="display:none;">Löschen</button>
+      </div>
+      <div class="right">
+        <button class="btn btn-sm" onclick="closeDeviceModal()">Abbrechen</button>
+        <button class="btn btn-sm btn-primary" onclick="saveDeviceFromModal()">Speichern</button>
+      </div>
     </div>
   </div>
 </div>
@@ -485,16 +670,60 @@
 let PROJECT = null;
 let activeFloorGroup = 'all';
 let activeFloorDevice = 'all';
+let editingDeviceId = null;
+let deviceSort = { key: null, dir: 1 };
+let groupSort  = { key: null, dir: 1 };
 
 // ── Constants ──────────────────────────────────────────────────────────────
 const ELEMENT_LABELS = {
-  lighting:     'Beleuchtung',
-  socket:       'Steckdose',
-  switch:       'Schalter',
-  smarthome:    'SmartHome/KNX',
-  data:         'Datennetz',
-  distribution: 'Unterverteiler'
+  lighting:            'Beleuchtung',
+  socket:              'Steckdose',
+  switch:              'Schalter',
+  smarthome:            'SmartHome/KNX',
+  data:                'Datennetz',
+  distribution:        'Unterverteiler',
+  terminal:            'Anschluss/Sonstiges',
+  lightningProtection: 'Blitzschutz'
 };
+
+// KNX-Funktionstypen: bestimmen, welche Gruppenadressen (DPTs) pro Schaltgruppe
+// erzeugt werden. Jetplan selbst kennt nur grobe Elementtypen (z.B. "lighting"),
+// nicht ob eine Leuchte dimmbar ist oder ein Anschluss eine Jalousie ansteuert –
+// das wird per inferKnxFunction() geraten oder manuell über das Bearbeiten-Modal
+// gesetzt (item.knxFunction) und überschreibt die Schätzung.
+const FUNCTION_TYPES = {
+  schalten: {
+    label: 'Schalten', badge: 'switch',
+    dpts: [ { key: 'schalten', label: 'Schalten', dpt: '1.001', offset: 0 } ]
+  },
+  dimmen: {
+    label: 'Dimmen', badge: 'dimmen',
+    dpts: [
+      { key: 'schalten', label: 'Schalten',          dpt: '1.001', offset: 0 },
+      { key: 'dimmen',   label: 'Dimmen (relativ)',  dpt: '3.007', offset: 1 },
+      { key: 'wert',     label: 'Helligkeitswert %', dpt: '5.001', offset: 2 }
+    ]
+  },
+  jalousie: {
+    label: 'Jalousie/Rollladen', badge: 'jalousie',
+    dpts: [
+      { key: 'aufab',    label: 'Auf/Ab',          dpt: '1.008', offset: 0 },
+      { key: 'stopp',    label: 'Stopp/Schritt',   dpt: '1.007', offset: 1 },
+      { key: 'position', label: 'Position %',      dpt: '5.001', offset: 2 },
+      { key: 'lamelle',  label: 'Lamellenwert %',  dpt: '5.001', offset: 3 }
+    ]
+  },
+  messen: {
+    label: 'Schalten + Messen', badge: 'messen',
+    dpts: [
+      { key: 'schalten', label: 'Schalten',        dpt: '1.001', offset: 0 },
+      { key: 'leistung', label: 'Wirkleistung',    dpt: '9.024', offset: 1 }
+    ]
+  }
+};
+const FUNCTION_PRIORITY = ['jalousie', 'messen', 'dimmen', 'schalten'];
+
+const STORAGE_KEY = 'jetplan-knx-converter:autosave';
 
 // ── File handling ──────────────────────────────────────────────────────────
 const dropZone  = document.getElementById('drop-zone');
@@ -529,10 +758,31 @@ function readFile(file) {
 
 // ── Data processing ────────────────────────────────────────────────────────
 function processData(json) {
-  const items   = json.data.outletItems || [];
   const project = json.data.projects?.[0] || {};
   const unit    = json.data.units?.[0] || {};
 
+  PROJECT = {
+    project, unit,
+    items: json.data.outletItems || [],
+    meta:  json.meta
+  };
+
+  rebuild();
+
+  document.getElementById('upload-panel').style.display = 'none';
+  document.getElementById('main-panel').style.display   = 'block';
+  document.getElementById('project-badge').textContent  =
+    `${project.name || '–'} / ${unit.unitCode || '–'}`;
+
+  renderAll();
+  saveAutosave();
+}
+
+// Berechnet alle abgeleiteten Strukturen (Etagen, Typen, Schaltgruppen, KNX-Adressen)
+// neu aus PROJECT.items. Wird nach jedem Import UND nach jeder Bearbeitung aufgerufen,
+// damit Änderungen sofort überall (Übersicht, Gruppen, Empfehlungen, Export) ankommen.
+function rebuild() {
+  const items = PROJECT.items;
   const byFloor = {};
   const byType  = {};
   const byGroup = {};
@@ -556,36 +806,89 @@ function processData(json) {
     }
   }
 
-  const groups = Object.values(byGroup).map((g, i) => ({
-    ...g,
-    rooms: [...g.rooms].filter(Boolean),
-    types: [...g.types],
-    knxAddr: generateKNXAddr(g.id, i)
-  }));
+  const groups = Object.values(byGroup).map((g, i) => {
+    const funcs = new Set(g.items.map(effectiveFunction).filter(Boolean));
+    const func  = FUNCTION_PRIORITY.find(f => funcs.has(f)) || 'schalten';
+    return {
+      ...g,
+      rooms: [...g.rooms].filter(Boolean),
+      types: [...g.types],
+      function: func,
+      knxAddresses: generateKNXAddresses(g.id, i, func)
+    };
+  });
 
-  PROJECT = {
-    project, unit, items, byFloor, byType, groups,
-    smarthomeItems:     items.filter(i => i.element?.type === 'smarthome'),
-    lightingItems:      items.filter(i => i.element?.type === 'lighting'),
-    ungroupedLighting:  items.filter(i => i.element?.type === 'lighting' && (!i.groupIds || !i.groupIds.length)),
-    meta: json.meta
-  };
-
-  document.getElementById('upload-panel').style.display = 'none';
-  document.getElementById('main-panel').style.display   = 'block';
-  document.getElementById('project-badge').textContent  =
-    `${project.name || '–'} / ${unit.unitCode || '–'}`;
-
-  renderAll();
+  PROJECT.byFloor = byFloor;
+  PROJECT.byType  = byType;
+  PROJECT.groups  = groups;
+  PROJECT.smarthomeItems    = items.filter(i => i.element?.type === 'smarthome');
+  PROJECT.lightingItems     = items.filter(i => i.element?.type === 'lighting');
+  PROJECT.ungroupedLighting = items.filter(i => i.element?.type === 'lighting' && (!i.groupIds || !i.groupIds.length));
+  PROJECT.ungroupedBlinds   = items.filter(i => effectiveFunction(i) === 'jalousie' && (!i.groupIds || !i.groupIds.length));
 }
 
-function generateKNXAddr(groupId, index) {
+// Ermittelt die KNX-Funktion eines Elements: manuell gesetzt (item.knxFunction, über
+// das Bearbeiten-Modal) geht vor automatischer Schätzung aus Jetplan-Typ/-Name.
+// Jetplan kennzeichnet z.B. Rollladenmotoren nur als generischen Typ "terminal" –
+// ohne diese Zuordnung würden sie in der KNX-Planung schlicht nicht auftauchen.
+function effectiveFunction(item) {
+  if (item.knxFunction) return item.knxFunction;
+  const type = item.element?.type;
+  const name = item.element?.name;
+  if (type === 'terminal' && name === 'rollladenmotor') return 'jalousie';
+  if (type === 'lighting' || type === 'socket' || type === 'switch') return 'schalten';
+  return null;
+}
+
+// Erzeugt für eine Schaltgruppe einen Satz Gruppenadressen passend zur Funktion
+// (z.B. 4 Adressen für Jalousie: Auf/Ab, Stopp, Position, Lamelle). Die Basis-Nummer
+// wird mit 10 multipliziert, um innerhalb der Untergruppe Platz für die Sub-Adressen
+// je Funktion zu schaffen (schalten+0, dimmen+1, wert+2, usw.).
+function generateKNXAddresses(groupId, index, functionKey) {
   const floorMap  = { DG: 3, OG: 2, EG: 1, Keller: 0, KE: 0 };
   const floorKey  = groupId.match(/^([A-Za-z]+)/)?.[1]?.toUpperCase() || 'XX';
-  const num       = groupId.match(/(\d+)$/)?.[1] || (index + 1);
+  const numMatch  = groupId.match(/(\d+)$/)?.[1];
+  const num       = numMatch ? parseInt(numMatch, 10) : (index + 1);
   const f         = floorMap[floorKey] ?? 9;
-  return `1/${f}/${num}`;
+  const base      = num * 10;
+  const defs      = (FUNCTION_TYPES[functionKey] || FUNCTION_TYPES.schalten).dpts;
+  return defs.map(d => ({ ...d, address: `1/${f}/${base + d.offset}` }));
 }
+
+// ── Autosave (localStorage) ─────────────────────────────────────────────────
+function saveAutosave() {
+  if (!PROJECT) return;
+  try {
+    const payload = {
+      meta: PROJECT.meta,
+      data: { projects: [PROJECT.project], units: [PROJECT.unit], outletItems: PROJECT.items }
+    };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+  } catch (e) { /* Storage voll oder nicht verfügbar – Bearbeitung bleibt trotzdem im Speicher */ }
+}
+
+function checkAutosaveOnStartup() {
+  if (localStorage.getItem(STORAGE_KEY)) {
+    document.getElementById('autosave-banner').style.display = 'flex';
+  }
+}
+
+function resumeAutosave() {
+  const raw = localStorage.getItem(STORAGE_KEY);
+  if (!raw) return;
+  try {
+    processData(JSON.parse(raw));
+  } catch (e) {
+    alert('Zwischengespeicherter Bearbeitungsstand ist beschädigt und konnte nicht geladen werden.');
+  }
+}
+
+function discardAutosave() {
+  localStorage.removeItem(STORAGE_KEY);
+  document.getElementById('autosave-banner').style.display = 'none';
+}
+
+checkAutosaveOnStartup();
 
 // ── Tab routing ────────────────────────────────────────────────────────────
 document.getElementById('tabs').addEventListener('click', e => {
@@ -641,6 +944,16 @@ function renderOverview() {
       <div class="stat-value">${d.byType.socket || 0}</div>
       <div class="stat-sub">Schuko</div>
     </div>
+    <div class="stat-card">
+      <div class="stat-label">Jalousien</div>
+      <div class="stat-value">${d.items.filter(i => effectiveFunction(i) === 'jalousie').length}</div>
+      <div class="stat-sub">${d.ungroupedBlinds.length ? d.ungroupedBlinds.length + ' ohne Gruppe' : 'Rollladen/Markise'}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Dimmbar</div>
+      <div class="stat-value">${d.items.filter(i => effectiveFunction(i) === 'dimmen').length}</div>
+      <div class="stat-sub">manuell markiert</div>
+    </div>
   `;
 
   let html = '<div class="section-title">Verteilung nach Etage</div>';
@@ -668,6 +981,29 @@ function renderOverview() {
   document.getElementById('floor-overview').innerHTML = html;
 }
 
+// ── Sorting helpers ──────────────────────────────────────────────────────────
+document.getElementById('groups-thead-row').addEventListener('click', e => {
+  const th = e.target.closest('th.sortable');
+  if (!th) return;
+  const key = th.dataset.key;
+  if (groupSort.key === key) groupSort.dir *= -1; else { groupSort.key = key; groupSort.dir = 1; }
+  renderGroupsTable(activeFloorGroup);
+});
+document.getElementById('devices-thead-row').addEventListener('click', e => {
+  const th = e.target.closest('th.sortable');
+  if (!th) return;
+  const key = th.dataset.key;
+  if (deviceSort.key === key) deviceSort.dir *= -1; else { deviceSort.key = key; deviceSort.dir = 1; }
+  renderDevicesTable(activeFloorDevice);
+});
+
+function updateSortIndicators(rowId, sortState) {
+  document.querySelectorAll(`#${rowId} th.sortable`).forEach(th => {
+    th.classList.remove('sort-asc', 'sort-desc');
+    if (th.dataset.key === sortState.key) th.classList.add(sortState.dir === 1 ? 'sort-asc' : 'sort-desc');
+  });
+}
+
 // ── Groups ─────────────────────────────────────────────────────────────────
 function renderGroups() {
   const floors = ['all', ...new Set(PROJECT.groups.map(g => g.floor))];
@@ -684,18 +1020,50 @@ function filterGroups(btn, floor) {
   renderGroupsTable(floor);
 }
 
+function groupSortValue(g, key) {
+  switch (key) {
+    case 'id':       return g.id.toLowerCase();
+    case 'floor':    return g.floor.toLowerCase();
+    case 'rooms':    return g.rooms.join(',').toLowerCase();
+    case 'types':    return g.types.join(',').toLowerCase();
+    case 'function': return FUNCTION_TYPES[g.function].label.toLowerCase();
+    case 'count':    return g.items.length;
+    default:         return '';
+  }
+}
+
 function renderGroupsTable(floor) {
-  const groups = floor === 'all' ? PROJECT.groups : PROJECT.groups.filter(g => g.floor === floor);
-  document.getElementById('groups-table').innerHTML = groups.map(g => `
+  let groups = floor === 'all' ? PROJECT.groups : PROJECT.groups.filter(g => g.floor === floor);
+
+  const q = (document.getElementById('group-search')?.value || '').trim().toLowerCase();
+  if (q) {
+    groups = groups.filter(g => {
+      const hay = [g.id, g.floor, g.rooms.join(' '), g.types.join(' '), FUNCTION_TYPES[g.function].label,
+        g.knxAddresses.map(a => a.address).join(' ')].join(' ').toLowerCase();
+      return hay.includes(q);
+    });
+  }
+
+  if (groupSort.key) {
+    const key = groupSort.key, dir = groupSort.dir;
+    groups = [...groups].sort((a, b) => {
+      const va = groupSortValue(a, key), vb = groupSortValue(b, key);
+      return va < vb ? -dir : va > vb ? dir : 0;
+    });
+  }
+  updateSortIndicators('groups-thead-row', groupSort);
+
+  document.getElementById('groups-table').innerHTML = groups.length ? groups.map(g => `
     <tr>
       <td><strong>${g.id}</strong></td>
       <td>${g.floor}</td>
       <td style="font-size:12px;color:var(--text-secondary);max-width:220px;">${g.rooms.join(', ') || '–'}</td>
       <td>${g.types.map(t => `<span class="badge badge-${t}">${ELEMENT_LABELS[t] || t}</span>`).join(' ')}</td>
+      <td><span class="badge badge-${FUNCTION_TYPES[g.function].badge}">${FUNCTION_TYPES[g.function].label}</span></td>
       <td style="font-weight:500;">${g.items.length}</td>
-      <td><code>${g.knxAddr}</code></td>
+      <td><div class="knx-addr-list">${g.knxAddresses.map(a => `<span>${a.label}: <code>${a.address}</code></span>`).join('')}</div></td>
     </tr>
-  `).join('');
+  `).join('') : `<tr><td colspan="7"><div class="empty-state">Keine Gruppen gefunden.</div></td></tr>`;
 }
 
 // ── Devices ────────────────────────────────────────────────────────────────
@@ -714,30 +1082,157 @@ function filterDevices(btn, floor) {
   renderDevicesTable(floor);
 }
 
+function deviceSortValue(item, key) {
+  switch (key) {
+    case 'type':     return (ELEMENT_LABELS[item.element?.type] || item.element?.type || '').toLowerCase();
+    case 'function': { const f = effectiveFunction(item); return f ? FUNCTION_TYPES[f].label.toLowerCase() : ''; }
+    case 'name':     return (item.element?.name || '').toLowerCase();
+    case 'level':    return (item.level || '').toLowerCase();
+    case 'room':     return (item.room || '').toLowerCase();
+    case 'fuse':     return (item.fuse || '').toLowerCase();
+    case 'groups':   return (item.groupIds || []).join(',').toLowerCase();
+    default:         return '';
+  }
+}
+
 function renderDevicesTable(floor) {
   const LIMIT = 300;
-  const items = floor === 'all' ? PROJECT.items : PROJECT.items.filter(i => i.level === floor);
-  const show  = items.slice(0, LIMIT);
-  document.getElementById('devices-table').innerHTML = show.map(item => {
+  let items = floor === 'all' ? PROJECT.items : PROJECT.items.filter(i => i.level === floor);
+
+  const q = (document.getElementById('device-search')?.value || '').trim().toLowerCase();
+  if (q) {
+    items = items.filter(i => {
+      const f = effectiveFunction(i);
+      const hay = [i.element?.name, i.element?.type, i.level, i.room, i.fuse,
+        (i.groupIds || []).join(' '), f ? FUNCTION_TYPES[f].label : ''].join(' ').toLowerCase();
+      return hay.includes(q);
+    });
+  }
+
+  if (deviceSort.key) {
+    const key = deviceSort.key, dir = deviceSort.dir;
+    items = [...items].sort((a, b) => {
+      const va = deviceSortValue(a, key), vb = deviceSortValue(b, key);
+      return va < vb ? -dir : va > vb ? dir : 0;
+    });
+  }
+  updateSortIndicators('devices-thead-row', deviceSort);
+
+  const show = items.slice(0, LIMIT);
+  document.getElementById('devices-table').innerHTML = show.length ? show.map(item => {
     const type = item.element?.type || 'other';
+    const func = effectiveFunction(item);
+    const funcBadge = func
+      ? `<span class="badge badge-${FUNCTION_TYPES[func].badge}">${FUNCTION_TYPES[func].label}</span>`
+      : `<span style="color:var(--text-tertiary);">–</span>`;
     return `
       <tr>
         <td><span class="badge badge-${type}">${ELEMENT_LABELS[type] || type}</span></td>
+        <td>${funcBadge}</td>
         <td style="font-size:12px;">${item.element?.name || '–'}</td>
         <td>${item.level || '–'}</td>
         <td style="font-size:12px;">${item.room || '–'}</td>
         <td><code>${item.fuse || '–'}</code></td>
         <td style="font-size:11px;color:var(--text-secondary);">${(item.groupIds || []).join(', ') || '–'}</td>
+        <td class="row-actions"><button class="icon-btn" onclick="openDeviceModal('${item.id}')">Bearbeiten</button></td>
       </tr>`;
-  }).join('');
+  }).join('') : `<tr><td colspan="8"><div class="empty-state">Keine Geräte gefunden.</div></td></tr>`;
+
   const moreEl = document.getElementById('devices-more');
   if (items.length > LIMIT) {
     moreEl.style.display = 'block';
-    moreEl.textContent   = `+ ${items.length - LIMIT} weitere Elemente (im CSV-Export enthalten)`;
+    moreEl.textContent   = `+ ${items.length - LIMIT} weitere Elemente (im CSV-Export enthalten, aber nicht in dieser Liste angezeigt)`;
   } else {
     moreEl.style.display = 'none';
   }
 }
+
+// ── Device edit modal ────────────────────────────────────────────────────────
+function openDeviceModal(id) {
+  editingDeviceId = id;
+  const delBtn = document.getElementById('dm-delete-btn');
+  if (id) {
+    const item = PROJECT.items.find(i => i.id === id);
+    if (!item) return;
+    document.getElementById('device-modal-title').textContent = 'Gerät bearbeiten';
+    delBtn.style.display = 'inline-flex';
+    document.getElementById('dm-type').value     = item.element?.type || 'lighting';
+    document.getElementById('dm-name').value     = item.element?.name || '';
+    document.getElementById('dm-level').value    = item.level || '';
+    document.getElementById('dm-room').value     = item.room || '';
+    document.getElementById('dm-fuse').value     = item.fuse || '';
+    document.getElementById('dm-groups').value   = (item.groupIds || []).join(', ');
+    document.getElementById('dm-function').value = item.knxFunction || effectiveFunction(item) || '';
+  } else {
+    document.getElementById('device-modal-title').textContent = 'Gerät hinzufügen';
+    delBtn.style.display = 'none';
+    document.getElementById('dm-type').value     = 'lighting';
+    document.getElementById('dm-name').value     = '';
+    document.getElementById('dm-level').value    = activeFloorDevice !== 'all' ? activeFloorDevice : '';
+    document.getElementById('dm-room').value     = '';
+    document.getElementById('dm-fuse').value     = '';
+    document.getElementById('dm-groups').value   = '';
+    document.getElementById('dm-function').value = '';
+  }
+  document.getElementById('device-modal').style.display = 'flex';
+}
+
+function closeDeviceModal() {
+  document.getElementById('device-modal').style.display = 'none';
+  editingDeviceId = null;
+}
+
+function saveDeviceFromModal() {
+  const type       = document.getElementById('dm-type').value;
+  const name       = document.getElementById('dm-name').value.trim();
+  const level      = document.getElementById('dm-level').value.trim();
+  const room       = document.getElementById('dm-room').value.trim();
+  const fuse       = document.getElementById('dm-fuse').value.trim();
+  const groupIds   = document.getElementById('dm-groups').value.split(',').map(s => s.trim()).filter(Boolean);
+  const knxFunction = document.getElementById('dm-function').value || null;
+
+  if (!name) { alert('Bitte einen Namen/Bezeichnung angeben.'); return; }
+
+  if (editingDeviceId) {
+    const item = PROJECT.items.find(i => i.id === editingDeviceId);
+    if (!item) return;
+    item.element = { ...item.element, type, name };
+    item.level = level;
+    item.room  = room;
+    if (fuse) item.fuse = fuse; else delete item.fuse;
+    if (groupIds.length) item.groupIds = groupIds; else delete item.groupIds;
+    if (knxFunction) item.knxFunction = knxFunction; else delete item.knxFunction;
+  } else {
+    const newItem = {
+      id: 'manual-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7),
+      order: 1,
+      unitId: PROJECT.unit?.id,
+      level, room,
+      element: { id: 'manual', name, type, canCustomerUse: true }
+    };
+    if (fuse) newItem.fuse = fuse;
+    if (groupIds.length) newItem.groupIds = groupIds;
+    if (knxFunction) newItem.knxFunction = knxFunction;
+    PROJECT.items.push(newItem);
+  }
+
+  closeDeviceModal();
+  rebuild();
+  renderAll();
+  saveAutosave();
+}
+
+function deleteDeviceFromModal() {
+  if (!editingDeviceId) return;
+  if (!confirm('Dieses Gerät wirklich löschen?')) return;
+  PROJECT.items = PROJECT.items.filter(i => i.id !== editingDeviceId);
+  closeDeviceModal();
+  rebuild();
+  renderAll();
+  saveAutosave();
+}
+
+function onDeviceTypeChange() { /* derzeit ohne abhängige Felder, Auswahl bleibt frei kombinierbar */ }
 
 // ── Recommendations ────────────────────────────────────────────────────────
 function renderRecommendations() {
@@ -751,6 +1246,17 @@ function renderRecommendations() {
       level: 'high',
       title: `${d.ungroupedLighting.length} Leuchten ohne Schaltgruppe`,
       text: `In den Räumen ${rooms.slice(0, 4).join(', ')}${rooms.length > 4 ? ' u.a.' : ''} befinden sich Leuchten ohne Gruppen-ID. Diese können per KNX nicht angesteuert werden. Empfehlung: Gruppen-IDs zuweisen und KNX-Schaltaktoren einplanen (z.B. MDT AMS-0816.02, 8-fach 16A).`
+    });
+  }
+
+  // 1b. Ungrouped blinds/shutters (Jetplan kennzeichnet Rollladenmotoren nur als
+  //     generischen "terminal"-Typ und vergibt dafür i.d.R. keine Gruppen-ID)
+  if (d.ungroupedBlinds.length > 0) {
+    const rooms = [...new Set(d.ungroupedBlinds.map(i => i.room))].filter(Boolean);
+    recs.push({
+      level: 'high',
+      title: `${d.ungroupedBlinds.length} Jalousie-/Rollladenantriebe ohne Schaltgruppe`,
+      text: `In ${rooms.slice(0, 4).join(', ')}${rooms.length > 4 ? ' u.a.' : ''} sind Rollladen-/Markisenantriebe geplant, aber ohne KNX-Gruppen-ID (Jetplan führt diese nur als "Anschluss"). Über "Bearbeiten" bei jedem Gerät eine Gruppen-ID zuweisen, damit Jalousieaktoren eingeplant werden können (z.B. MDT AKI-0424.03, 4-fach Jalousieaktor 24V, jeweils 4 KNX-Adressen: Auf/Ab, Stopp, Position, Lamelle).`
     });
   }
 
@@ -796,6 +1302,26 @@ function renderRecommendations() {
       level: 'medium',
       title: 'LED-Stripes: KNX-Dimmaktor oder DALI-Gateway erforderlich',
       text: 'LED-Stripes benötigen einen KNX-Dimmaktor (z.B. MDT AKD-0401.02 für 4-Kanal DALI/DSI) oder RGBW-Aktor. Sicherstellen dass Netzteil (12V/24V DC) und Trafo für Phasenanschnitt geeignet sind. Max. Last pro Kanal beachten.'
+    });
+  }
+
+  // 5b. Dimmable lighting → dimming actor required
+  const dimmenCount = d.items.filter(i => effectiveFunction(i) === 'dimmen').length;
+  if (dimmenCount > 0) {
+    recs.push({
+      level: 'medium',
+      title: `${dimmenCount} dimmbare Leuchten markiert`,
+      text: `Für dimmbare Kreise wird pro Gruppe ein KNX-Dimmaktor benötigt (z.B. MDT AKD-0424.03, 4-Kanal Universaldimmaktor für LED/Trafo). Je Gruppe werden 3 KNX-Adressen erzeugt (Schalten, Dimmen relativ, Helligkeitswert) statt einer einzelnen Schaltadresse — LED-Kompatibilität (dimmbare Treiber/Trafos) beim Elektriker abklären.`
+    });
+  }
+
+  // 5c. Measured/switchable loads → energy metering actor required
+  const messenCount = d.items.filter(i => effectiveFunction(i) === 'messen').length;
+  if (messenCount > 0) {
+    recs.push({
+      level: 'low',
+      title: `${messenCount} Verbraucher mit Energiemessung markiert`,
+      text: `Für schalt- und messbare Verbraucher wird ein KNX-Schaltaktor mit Strommessung benötigt (z.B. MDT AMI-0816.03, 8-fach mit Energiemessung je Kanal). Pro Gruppe werden 2 Adressen erzeugt (Schalten, Wirkleistung) für Verbrauchsmonitoring und Lastabwurf.`
     });
   }
 
@@ -957,20 +1483,35 @@ function download(filename, content, type) {
 
 function exportCSV() {
   let csv = '\uFEFF'; // BOM für Excel
-  csv += 'KNX-Adresse,Gruppen-ID,Etage,Räume,Typen,Anzahl Geräte\n';
+  csv += 'KNX-Adresse,Funktion,DPT,Gruppen-ID,Etage,Räume,Typen,Anzahl Geräte\n';
   PROJECT.groups.forEach(g => {
-    csv += `"${g.knxAddr}","${g.id}","${g.floor}","${g.rooms.join('; ')}","${g.types.join('/')}",${g.items.length}\n`;
+    g.knxAddresses.forEach(a => {
+      csv += `"${a.address}","${a.label}","${a.dpt}","${g.id}","${g.floor}","${g.rooms.join('; ')}","${g.types.join('/')}",${g.items.length}\n`;
+    });
   });
   download('knx-gruppenadressen.csv', csv, 'text/csv;charset=utf-8');
 }
 
 function exportDeviceList() {
   let csv = '\uFEFF';
-  csv += 'Typ,Name,Etage,Raum,Sicherung,Gruppen\n';
+  csv += 'Typ,Funktion,Name,Etage,Raum,Sicherung,Gruppen\n';
   PROJECT.items.forEach(i => {
-    csv += `"${i.element?.type || ''}","${i.element?.name || ''}","${i.level}","${i.room || ''}","${i.fuse || ''}","${(i.groupIds || []).join('; ')}"\n`;
+    const f = effectiveFunction(i);
+    csv += `"${i.element?.type || ''}","${f ? FUNCTION_TYPES[f].label : ''}","${i.element?.name || ''}","${i.level}","${i.room || ''}","${i.fuse || ''}","${(i.groupIds || []).join('; ')}"\n`;
   });
   download('knx-geraete.csv', csv, 'text/csv;charset=utf-8');
+}
+
+function exportProjectState() {
+  const payload = {
+    meta: PROJECT.meta,
+    data: {
+      projects: [PROJECT.project],
+      units: [PROJECT.unit],
+      outletItems: PROJECT.items
+    }
+  };
+  download(`knx-projektstand-${PROJECT.project?.name || 'projekt'}.json`, JSON.stringify(payload, null, 2), 'application/json;charset=utf-8');
 }
 
 function exportETS() {
@@ -988,8 +1529,10 @@ function exportETS() {
     const floorGroups = d.groups.filter(g => g.floor === floor);
     xml += `      <GroupRange Name="${escXml(floor)}" Address="${fi + 1}">\n`;
     floorGroups.forEach(g => {
-      const desc = `${g.id}: ${g.rooms.slice(0, 3).join(', ')}`;
-      xml += `        <GroupAddress Name="${escXml(g.id)}" Address="${escXml(g.knxAddr)}" Description="${escXml(desc)}" DPTs="DPT-1" />\n`;
+      g.knxAddresses.forEach(a => {
+        const desc = `${g.id} – ${a.label}: ${g.rooms.slice(0, 3).join(', ')}`;
+        xml += `        <GroupAddress Name="${escXml(g.id + ' ' + a.label)}" Address="${escXml(a.address)}" Description="${escXml(desc)}" DPTs="DPT-${escXml(a.dpt)}" />\n`;
+      });
     });
     xml += `      </GroupRange>\n`;
   });
@@ -1008,11 +1551,12 @@ function exportReport() {
 
   const groupRows = d.groups.map(g => `
     <tr>
-      <td>${g.knxAddr}</td>
+      <td>${g.knxAddresses.map(a => `${a.address} (${a.label})`).join('<br>')}</td>
       <td>${g.id}</td>
       <td>${g.floor}</td>
       <td>${g.rooms.join(', ') || '–'}</td>
       <td>${g.types.map(t => ELEMENT_LABELS[t] || t).join(', ')}</td>
+      <td>${FUNCTION_TYPES[g.function].label}</td>
       <td>${g.items.length}</td>
     </tr>`).join('');
 
@@ -1051,7 +1595,7 @@ function exportReport() {
 
   <h2>Gruppenadressenliste</h2>
   <table>
-    <thead><tr><th>KNX-Adresse</th><th>Gruppe</th><th>Etage</th><th>Räume</th><th>Typ</th><th>Geräte</th></tr></thead>
+    <thead><tr><th>KNX-Adresse(n)</th><th>Gruppe</th><th>Etage</th><th>Räume</th><th>Typ</th><th>Funktion</th><th>Geräte</th></tr></thead>
     <tbody>${groupRows}</tbody>
   </table>
 
