@@ -23,23 +23,25 @@ alter table public.projects enable row level security;
 
 -- v1: single shared pool. ANY authenticated user can see/edit/delete ANY project.
 -- No per-user or per-org isolation yet — deliberate, see forward-compat note below.
-create policy "authenticated select all projects"
+-- Policy names use plain identifiers (no quotes/spaces) so they survive
+-- copy-paste through chat/markdown clients that mangle "smart quotes".
+create policy projects_select_authenticated
   on public.projects for select
   to authenticated
   using (true);
 
-create policy "authenticated insert projects"
+create policy projects_insert_authenticated
   on public.projects for insert
   to authenticated
   with check (true);
 
-create policy "authenticated update all projects"
+create policy projects_update_authenticated
   on public.projects for update
   to authenticated
   using (true)
   with check (true);
 
-create policy "authenticated delete all projects"
+create policy projects_delete_authenticated
   on public.projects for delete
   to authenticated
   using (true);
