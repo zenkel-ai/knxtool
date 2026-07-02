@@ -426,20 +426,28 @@
   .modal-actions .left  { display: flex; gap: 8px; }
   .modal-actions .right { display: flex; gap: 8px; }
 
-  .autosave-banner {
-    border: 0.5px solid var(--border);
-    border-radius: var(--radius-md);
-    background: var(--bg-secondary);
-    padding: 12px 14px;
-    margin-bottom: 1.5rem;
-    display: flex; align-items: center; justify-content: space-between;
-    gap: 10px; flex-wrap: wrap;
-  }
-  .autosave-banner p { font-size: 12px; color: var(--text-secondary); }
-
   .knx-addr-list { display: flex; flex-direction: column; gap: 2px; }
   .knx-addr-list span { font-size: 11px; color: var(--text-secondary); }
   .knx-addr-list code { color: var(--text); }
+
+  /* Auth + project list */
+  .auth-panel {
+    padding: 2rem; max-width: 360px; margin: 0 auto;
+    display: flex; flex-direction: column; gap: 0.75rem;
+  }
+  .auth-panel h2 { font-size: 16px; font-weight: 500; }
+  .auth-panel input {
+    padding: 8px 10px;
+    border: 0.5px solid var(--border-md);
+    border-radius: var(--radius-md);
+    font-size: 13px;
+    background: var(--bg);
+    color: var(--text);
+  }
+  .auth-panel input:focus { outline: none; border-color: var(--text-secondary); }
+
+  .header-right { display: flex; align-items: center; gap: 10px; }
+  .sync-status { font-size: 11px; color: var(--text-tertiary); min-width: 90px; text-align: right; }
 </style>
 </head>
 <body>
@@ -452,18 +460,35 @@
       <h1>Jetplan → KNX Konverter</h1>
       <p>Analysiert Stromlaufpläne und generiert KNX-Projektdaten mit intelligenten Empfehlungen</p>
     </div>
+    <div class="header-right" id="header-right" style="display:none;">
+      <span class="sync-status" id="sync-status"></span>
+      <button class="btn btn-sm" id="back-to-projects-btn" onclick="backToProjects()" style="display:none;">Projekte</button>
+      <span id="user-email" style="font-size:12px;color:var(--text-secondary);"></span>
+      <button class="btn btn-sm" onclick="signOut()">Abmelden</button>
+    </div>
     <div class="header-badge" id="project-badge">Kein Projekt geladen</div>
   </div>
 
-  <!-- Upload Panel -->
-  <div id="upload-panel" style="padding:2rem;">
-    <div class="autosave-banner" id="autosave-banner" style="display:none;">
-      <p>Es wurde ein zwischengespeicherter Bearbeitungsstand gefunden.</p>
-      <div style="display:flex;gap:8px;">
-        <button class="btn btn-sm" onclick="discardAutosave()">Verwerfen</button>
-        <button class="btn btn-primary btn-sm" onclick="resumeAutosave()">Fortsetzen</button>
-      </div>
+  <!-- Auth Panel -->
+  <div id="auth-panel" class="auth-panel" style="display:none;">
+    <h2>Anmelden</h2>
+    <p style="font-size:13px;color:var(--text-secondary);">Melde dich mit deiner E-Mail-Adresse an — du bekommst einen Magic Link zugeschickt.</p>
+    <input type="email" id="auth-email" placeholder="name@firma.de">
+    <button class="btn btn-primary" onclick="sendMagicLink()">Magic Link senden</button>
+    <p id="auth-status" style="font-size:12px;color:var(--text-secondary);"></p>
+  </div>
+
+  <!-- Projects Panel -->
+  <div id="projects-panel" style="display:none;padding:2rem;">
+    <div class="section-title" style="margin-top:0;">Projekte</div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Name</th><th>Unit</th><th>Zuletzt geändert</th><th></th></tr></thead>
+        <tbody id="projects-table"></tbody>
+      </table>
     </div>
+
+    <div class="section-title">Neues Projekt aus Jetplan-Export anlegen</div>
     <div class="upload-zone" id="drop-zone">
       <svg class="upload-icon" width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
         <path d="M24 32V16M16 24l8-8 8 8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -665,6 +690,7 @@
   </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 // ── State ──────────────────────────────────────────────────────────────────
 let PROJECT = null;
@@ -673,6 +699,121 @@ let activeFloorDevice = 'all';
 let editingDeviceId = null;
 let deviceSort = { key: null, dir: 1 };
 let groupSort  = { key: null, dir: 1 };
+let currentUser = null;
+let currentProjectId = null;
+
+// ── Supabase / Auth ──────────────────────────────────────────────────────────
+const SUPABASE_URL = 'https://qmbmskthgxdmybvqyoax.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFtYm1za3RoZ3hkbXlidnF5b2F4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI5MjI0OTEsImV4cCI6MjA5ODQ5ODQ5MX0.ynxLu22b6tEWB-c1Vm2XrEwU6_noKkYrNaGXAccrLlo';
+
+let supabaseClient = null;
+if (window.supabase) {
+  supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+} else {
+  // CDN blockiert/offline – sichtbar melden statt kryptischer Folgefehler bei jedem Aufruf
+  document.addEventListener('DOMContentLoaded', () => {
+    document.body.innerHTML = '<p style="padding:2rem;">Supabase-Client konnte nicht geladen werden (Netzwerkproblem?). Bitte Seite neu laden.</p>';
+  });
+}
+
+async function initAuth() {
+  const { data: { session } } = await supabaseClient.auth.getSession();
+  handleSession(session);
+  supabaseClient.auth.onAuthStateChange((_event, session) => handleSession(session));
+}
+
+function handleSession(session) {
+  currentUser = session?.user || null;
+  document.getElementById('header-right').style.display = currentUser ? 'flex' : 'none';
+  document.getElementById('user-email').textContent = currentUser?.email || '';
+  if (currentUser) {
+    showPanel('projects');
+    loadProjectsList();
+  } else {
+    showPanel('auth');
+  }
+}
+
+async function sendMagicLink() {
+  const email  = document.getElementById('auth-email').value.trim();
+  const status = document.getElementById('auth-status');
+  if (!email) return;
+  status.textContent = 'Sende Link…';
+  const { error } = await supabaseClient.auth.signInWithOtp({
+    email,
+    options: { emailRedirectTo: window.location.origin + window.location.pathname }
+  });
+  status.textContent = error ? ('Fehler: ' + error.message) : 'Link gesendet — bitte E-Mail prüfen.';
+}
+
+function signOut() {
+  supabaseClient.auth.signOut();
+  currentProjectId = null;
+  PROJECT = null;
+}
+
+// Einzige Stelle, die zwischen Login-, Projektliste- und Haupt-Ansicht umschaltet.
+function showPanel(name) {
+  document.getElementById('auth-panel').style.display          = name === 'auth'     ? 'flex'  : 'none';
+  document.getElementById('projects-panel').style.display      = name === 'projects' ? 'block' : 'none';
+  document.getElementById('main-panel').style.display           = name === 'app'      ? 'block' : 'none';
+  document.getElementById('back-to-projects-btn').style.display = name === 'app'      ? 'inline-block' : 'none';
+}
+
+async function loadProjectsList() {
+  const { data, error } = await supabaseClient
+    .from('projects')
+    .select('id,name,unit_code,updated_at')
+    .order('updated_at', { ascending: false });
+  const tbody = document.getElementById('projects-table');
+  if (error) { tbody.innerHTML = `<tr><td colspan="4">Fehler: ${error.message}</td></tr>`; return; }
+  tbody.innerHTML = data.length ? data.map(p => `
+    <tr>
+      <td>${p.name || '–'}</td>
+      <td>${p.unit_code || '–'}</td>
+      <td>${new Date(p.updated_at).toLocaleString('de-DE')}</td>
+      <td style="display:flex;gap:6px;">
+        <button class="btn btn-sm btn-primary" onclick="openProject('${p.id}')">Öffnen</button>
+        <button class="btn btn-sm" onclick="deleteProjectRow('${p.id}')">Löschen</button>
+      </td>
+    </tr>`).join('') : `<tr><td colspan="4">Noch keine Projekte.</td></tr>`;
+}
+
+async function openProject(id) {
+  const { data, error } = await supabaseClient.from('projects').select('data').eq('id', id).single();
+  if (error) { alert('Projekt konnte nicht geladen werden: ' + error.message); return; }
+  currentProjectId = id;
+  processData(data.data);
+  showPanel('app');
+}
+
+async function deleteProjectRow(id) {
+  if (!confirm('Dieses Projekt wirklich unwiderruflich löschen?')) return;
+  const { error } = await supabaseClient.from('projects').delete().eq('id', id);
+  if (error) { alert('Löschen fehlgeschlagen: ' + error.message); return; }
+  loadProjectsList();
+}
+
+async function handleNewProjectFile(json) {
+  const project = json.data.projects?.[0] || {};
+  const unit    = json.data.units?.[0] || {};
+  const payload = { meta: json.meta, data: { projects: [project], units: [unit], outletItems: json.data.outletItems || [] } };
+  const { data, error } = await supabaseClient
+    .from('projects')
+    .insert({ name: project.name || 'Unbenanntes Projekt', unit_code: unit.unitCode || null, data: payload, created_by: currentUser.id })
+    .select('id').single();
+  if (error) { alert('Projekt konnte nicht angelegt werden: ' + error.message); return; }
+  currentProjectId = data.id;
+  processData(payload);
+  showPanel('app');
+}
+
+function backToProjects() {
+  currentProjectId = null;
+  PROJECT = null;
+  showPanel('projects');
+  loadProjectsList();
+}
 
 // ── Constants ──────────────────────────────────────────────────────────────
 const ELEMENT_LABELS = {
@@ -723,8 +864,6 @@ const FUNCTION_TYPES = {
 };
 const FUNCTION_PRIORITY = ['jalousie', 'messen', 'dimmen', 'schalten'];
 
-const STORAGE_KEY = 'jetplan-knx-converter:autosave';
-
 // ── File handling ──────────────────────────────────────────────────────────
 const dropZone  = document.getElementById('drop-zone');
 const fileInput = document.getElementById('file-input');
@@ -748,7 +887,7 @@ function readFile(file) {
   r.onload = ev => {
     try {
       const json = JSON.parse(ev.target.result);
-      processData(json);
+      handleNewProjectFile(json);
     } catch (err) {
       alert('Fehler: Ungültige JSON-Datei.\n' + err.message);
     }
@@ -769,13 +908,10 @@ function processData(json) {
 
   rebuild();
 
-  document.getElementById('upload-panel').style.display = 'none';
-  document.getElementById('main-panel').style.display   = 'block';
-  document.getElementById('project-badge').textContent  =
+  document.getElementById('project-badge').textContent =
     `${project.name || '–'} / ${unit.unitCode || '–'}`;
 
   renderAll();
-  saveAutosave();
 }
 
 // Berechnet alle abgeleiteten Strukturen (Etagen, Typen, Schaltgruppen, KNX-Adressen)
@@ -855,40 +991,43 @@ function generateKNXAddresses(groupId, index, functionKey) {
   return defs.map(d => ({ ...d, address: `1/${f}/${base + d.offset}` }));
 }
 
-// ── Autosave (localStorage) ─────────────────────────────────────────────────
-function saveAutosave() {
-  if (!PROJECT) return;
-  try {
-    const payload = {
-      meta: PROJECT.meta,
-      data: { projects: [PROJECT.project], units: [PROJECT.unit], outletItems: PROJECT.items }
-    };
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
-  } catch (e) { /* Storage voll oder nicht verfügbar – Bearbeitung bleibt trotzdem im Speicher */ }
+// ── Persistence (Supabase) ───────────────────────────────────────────────────
+// Debounced statt pro Tastendruck, weil persistProject() ohnehin nur an groben
+// Stellen aufgerufen wird (Gerät speichern/löschen) – kein Autosave pro Feld.
+// Kein Konfliktmanagement: bei gleichzeitiger Bearbeitung gewinnt der letzte
+// Schreibzugriff (akzeptabel für einen kleinen geteilten Team-Pool, v1).
+let persistTimer = null, persistInFlight = false, persistQueued = false;
+
+function persistProject() {
+  if (!PROJECT || !currentProjectId) return;
+  clearTimeout(persistTimer);
+  persistTimer = setTimeout(runPersist, 400);
 }
 
-function checkAutosaveOnStartup() {
-  if (localStorage.getItem(STORAGE_KEY)) {
-    document.getElementById('autosave-banner').style.display = 'flex';
-  }
+async function runPersist() {
+  if (!PROJECT || !currentProjectId) return;
+  if (persistInFlight) { persistQueued = true; return; }
+  persistInFlight = true;
+  setSyncStatus('saving');
+  const payload = {
+    meta: PROJECT.meta,
+    data: { projects: [PROJECT.project], units: [PROJECT.unit], outletItems: PROJECT.items }
+  };
+  const { error } = await supabaseClient
+    .from('projects')
+    .update({ name: PROJECT.project?.name || null, unit_code: PROJECT.unit?.unitCode || null, data: payload })
+    .eq('id', currentProjectId);
+  persistInFlight = false;
+  setSyncStatus(error ? 'error' : 'saved');
+  if (persistQueued) { persistQueued = false; runPersist(); }
 }
 
-function resumeAutosave() {
-  const raw = localStorage.getItem(STORAGE_KEY);
-  if (!raw) return;
-  try {
-    processData(JSON.parse(raw));
-  } catch (e) {
-    alert('Zwischengespeicherter Bearbeitungsstand ist beschädigt und konnte nicht geladen werden.');
-  }
+function setSyncStatus(state) {
+  document.getElementById('sync-status').textContent =
+    { saving: 'Speichert…', saved: 'Gespeichert', error: 'Fehler beim Speichern' }[state] || '';
 }
 
-function discardAutosave() {
-  localStorage.removeItem(STORAGE_KEY);
-  document.getElementById('autosave-banner').style.display = 'none';
-}
-
-checkAutosaveOnStartup();
+initAuth();
 
 // ── Tab routing ────────────────────────────────────────────────────────────
 document.getElementById('tabs').addEventListener('click', e => {
@@ -1219,7 +1358,7 @@ function saveDeviceFromModal() {
   closeDeviceModal();
   rebuild();
   renderAll();
-  saveAutosave();
+  persistProject();
 }
 
 function deleteDeviceFromModal() {
@@ -1229,7 +1368,7 @@ function deleteDeviceFromModal() {
   closeDeviceModal();
   rebuild();
   renderAll();
-  saveAutosave();
+  persistProject();
 }
 
 function onDeviceTypeChange() { /* derzeit ohne abhängige Felder, Auswahl bleibt frei kombinierbar */ }

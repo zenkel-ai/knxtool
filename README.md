@@ -8,10 +8,12 @@ Web-App zur Analyse von Jetplan-Stromlaufplänen und Generierung von KNX-Projekt
 
 ## Features
 
+- Login per Magic Link (Supabase Auth), Projekte werden geteilt im Team verwaltet
 - Jetplan JSON Datei einlesen und analysieren
-- Schaltgruppen mit KNX-Gruppenadressen automatisch zuordnen
+- Schaltgruppen mit KNX-Gruppenadressen automatisch zuordnen (inkl. Dimmen/Jalousie/Messen)
+- Tabellen sortier- und filterbar, Geräte/Projekte bearbeitbar
 - KI-gestützte Empfehlungen (via Claude API)
-- Export: ETS-XML, Gruppenadressenliste (CSV), Geräteliste (CSV), HTML-Bericht
+- Export: ETS-XML, Gruppenadressenliste (CSV), Geräteliste (CSV), HTML-Bericht, Projektstand (JSON)
 
 ---
 
@@ -24,12 +26,14 @@ Die App deployed automatisch auf `knxtool.seed2peak.group` bei jedem Push auf `m
 1. SSH-Key auf Hetzner KonsoleH hinterlegen
 2. GitHub Secrets anlegen
 3. Subdomain in KonsoleH einrichten
+4. Supabase-Schema aus `supabase/schema.sql` einmalig im Supabase SQL Editor ausführen
+   und unter Authentication → URL Configuration die Site URL/Redirect URLs setzen
 
 ---
 
 ## Lokale Entwicklung
 
-Einfach `index.html` im Browser öffnen — keine Build-Tools nötig.
+Einfach `index.html` im Browser öffnen — keine Build-Tools nötig (Supabase-Client wird per CDN geladen).
 
 ---
 
@@ -38,6 +42,8 @@ Einfach `index.html` im Browser öffnen — keine Build-Tools nötig.
 ```
 jetplan-knx-converter/
 ├── index.html              # Die komplette App (HTML/CSS/JS)
+├── supabase/
+│   └── schema.sql          # DB-Schema + RLS-Policies (manuell in Supabase SQL Editor ausführen)
 ├── .github/
 │   └── workflows/
 │       └── deploy.yml      # Auto-Deploy via GitHub Actions
