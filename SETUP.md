@@ -116,7 +116,7 @@ git push
 | SSH Host | `www728.your-server.de` |
 | SSH User | `bzipjy` |
 | SSH Port | `222` |
-| Deploy-Pfad | `~/html/knxtool` |
+| Deploy-Pfad | `~/public_html/html/knxtool` |
 | Live-URL | https://knxtool.seed2peak.group |
 | GitHub Repo | https://github.com/zenkel-ai/knxtool |
 
@@ -132,3 +132,12 @@ git push
 
 **git clone schlägt fehl auf Server**
 → Das Repo ist Private? Dann HTTPS-Clone mit Token oder Repo auf Public stellen.
+
+**Seite zeigt trotz erfolgreichem Deploy nie neue Änderungen**
+→ `$HOME` (SSH-Home, `/usr/home/bzipjy`) und das tatsächliche Web-Root
+(`public_html`, ein Symlink auf `/usr/www/users/bzipjy`) sind zwei getrennte
+Verzeichnisse. Der Deploy-Pfad muss unter `public_html/...` liegen, nicht direkt
+unter `$HOME/...` — sonst landet `git pull` in einem Ordner, den Apache nie
+ausliefert (genau das war hier der Bug: `$HOME/html/knxtool` statt
+`$HOME/public_html/html/knxtool`). Prüfen mit:
+`ls -la ~/ | grep public_html` und `sha256sum` auf beiden Pfaden vergleichen.

@@ -21,10 +21,13 @@ jobs:
           port: 222
           script: |
             set -e
-            DEPLOY_DIR="$HOME/html/knxtool"
+            # WICHTIG: $HOME/html/knxtool ist NUR das SSH-Home-Verzeichnis und wird
+            # von Apache nicht ausgeliefert. Das tatsächliche Web-Root liegt unter
+            # public_html (Symlink auf /usr/www/users/bzipjy) - dorthin muss deployt werden.
+            DEPLOY_DIR="$HOME/public_html/html/knxtool"
 
             # Sicherstellen dass der Ordner existiert
-            mkdir -p "$DEPLOY_DIR"
+            mkdir -p "$(dirname "$DEPLOY_DIR")"
 
             # Repo klonen oder aktualisieren
             if [ -d "$DEPLOY_DIR/.git" ]; then
@@ -32,7 +35,8 @@ jobs:
               cd "$DEPLOY_DIR"
               git pull origin main
             else
-              echo "→ Cloning repository..."
+              echo "→ Cloning repository (removing any stale non-git content first)..."
+              rm -rf "$DEPLOY_DIR"
               git clone https://github.com/zenkel-ai/knxtool.git "$DEPLOY_DIR"
             fi
 
