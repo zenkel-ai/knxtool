@@ -386,6 +386,11 @@
   .icon-btn:hover { background: var(--bg-secondary); color: var(--text); }
 
   .empty-state { padding: 1.5rem; text-align: center; color: var(--text-secondary); font-size: 13px; }
+  .row-dimmed { opacity: 0.45; }
+  .room-tree summary { cursor: pointer; user-select: none; }
+  .room-tree ul { list-style: none; }
+  .room-tree li { cursor: pointer; }
+  .room-tree li:hover { text-decoration: underline; }
 
   /* Modal */
   .modal-overlay {
@@ -545,9 +550,14 @@
 
       <!-- Devices Tab -->
       <div class="panel" id="tab-devices">
+        <div style="margin-bottom:1rem;">
+          <button class="btn btn-sm" onclick="toggleRoomTree()">Raum-/Geschossstruktur bearbeiten</button>
+          <div id="room-tree" class="room-tree" style="display:none;margin-top:10px;padding:12px;border:0.5px solid var(--border);border-radius:var(--radius-md);background:var(--bg-secondary);"></div>
+        </div>
         <div class="floor-filter" id="device-floor-filter"></div>
         <div class="table-toolbar">
           <input type="search" id="device-search" placeholder="Suchen (Name, Raum, Sicherung, Gruppe …)" oninput="renderDevicesTable(activeFloorDevice)">
+          <button class="btn btn-sm" id="relevance-toggle-btn" onclick="toggleRelevanceFilter()">Alle anzeigen</button>
           <button class="btn btn-sm btn-primary" onclick="openDeviceModal(null)">+ Neues Gerät</button>
         </div>
         <div class="table-wrap">
@@ -696,6 +706,7 @@
 let PROJECT = null;
 let activeFloorGroup = 'all';
 let activeFloorDevice = 'all';
+let deviceRelevanceFilter = 'relevant'; // 'relevant' | 'all' — siehe isKnxRelevant()
 let editingDeviceId = null;
 let deviceSort = { key: null, dir: 1 };
 let groupSort  = { key: null, dir: 1 };
@@ -934,11 +945,15 @@ function rebuild() {
 
     byType[type] = (byType[type] || 0) + 1;
 
-    for (const g of groups) {
-      if (!byGroup[g]) byGroup[g] = { id: g, floor, rooms: new Set(), types: new Set(), items: [] };
-      byGroup[g].items.push(item);
-      byGroup[g].rooms.add(room);
-      byGroup[g].types.add(type);
+    // Als nicht KNX-relevant markierte Objekte (z.B. reine LAN-Steckdosen) erzeugen
+    // keine Schaltgruppen/Adressen, bleiben aber in der Geräteliste sichtbar.
+    if (isKnxRelevant(item)) {
+      for (const g of groups) {
+        if (!byGroup[g]) byGroup[g] = { id: g, floor, rooms: new Set(), types: new Set(), items: [] };
+        byGroup[g].items.push(item);
+        byGroup[g].rooms.add(room);
+        byGroup[g].types.add(type);
+      }
     }
   }
 
@@ -961,6 +976,32 @@ function rebuild() {
   PROJECT.lightingItems     = items.filter(i => i.element?.type === 'lighting');
   PROJECT.ungroupedLighting = items.filter(i => i.element?.type === 'lighting' && (!i.groupIds || !i.groupIds.length));
   PROJECT.ungroupedBlinds   = items.filter(i => effectiveFunction(i) === 'jalousie' && (!i.groupIds || !i.groupIds.length));
+}
+
+// Objekt-Fokus-Filter: ob ein Objekt für die KNX-Planung überhaupt relevant ist (z.B.
+// eine reine LAN-Steckdose nicht). Manuell gesetzt (item.knxRelevant) gewinnt; ohne
+// manuelle Angabe gilt ein Objekt als relevant, wenn effectiveFunction() ihm überhaupt
+// eine Funktion zuordnen kann. Bewusst kein Feld, das beim Import geschrieben wird -
+// nur ein tatsächliches Umschalten durch den Nutzer landet in den Projektdaten.
+function isKnxRelevant(item) {
+  if (item.knxRelevant !== undefined) return item.knxRelevant;
+  return effectiveFunction(item) !== null;
+}
+
+function toggleKnxRelevant(id) {
+  const item = PROJECT.items.find(i => i.id === id);
+  if (!item) return;
+  item.knxRelevant = !isKnxRelevant(item);
+  rebuild();
+  renderAll();
+  persistProject();
+}
+
+function toggleRelevanceFilter() {
+  deviceRelevanceFilter = deviceRelevanceFilter === 'relevant' ? 'all' : 'relevant';
+  document.getElementById('relevance-toggle-btn').textContent =
+    deviceRelevanceFilter === 'relevant' ? 'Alle anzeigen' : 'Nur relevante';
+  renderDevicesTable(activeFloorDevice);
 }
 
 // Ermittelt die KNX-Funktion eines Elements: manuell gesetzt (item.knxFunction, über
@@ -1046,6 +1087,7 @@ function renderAll() {
   renderGroups();
   renderDevices();
   renderRecommendations();
+  renderRoomTree();
 }
 
 // ── Overview ───────────────────────────────────────────────────────────────
@@ -1238,6 +1280,8 @@ function renderDevicesTable(floor) {
   const LIMIT = 300;
   let items = floor === 'all' ? PROJECT.items : PROJECT.items.filter(i => i.level === floor);
 
+  if (deviceRelevanceFilter === 'relevant') items = items.filter(isKnxRelevant);
+
   const q = (document.getElementById('device-search')?.value || '').trim().toLowerCase();
   if (q) {
     items = items.filter(i => {
@@ -1261,11 +1305,12 @@ function renderDevicesTable(floor) {
   document.getElementById('devices-table').innerHTML = show.length ? show.map(item => {
     const type = item.element?.type || 'other';
     const func = effectiveFunction(item);
+    const relevant = isKnxRelevant(item);
     const funcBadge = func
       ? `<span class="badge badge-${FUNCTION_TYPES[func].badge}">${FUNCTION_TYPES[func].label}</span>`
       : `<span style="color:var(--text-tertiary);">–</span>`;
     return `
-      <tr>
+      <tr class="${relevant ? '' : 'row-dimmed'}">
         <td><span class="badge badge-${type}">${ELEMENT_LABELS[type] || type}</span></td>
         <td>${funcBadge}</td>
         <td style="font-size:12px;">${item.element?.name || '–'}</td>
@@ -1273,7 +1318,10 @@ function renderDevicesTable(floor) {
         <td style="font-size:12px;">${item.room || '–'}</td>
         <td><code>${item.fuse || '–'}</code></td>
         <td style="font-size:11px;color:var(--text-secondary);">${(item.groupIds || []).join(', ') || '–'}</td>
-        <td class="row-actions"><button class="icon-btn" onclick="openDeviceModal('${item.id}')">Bearbeiten</button></td>
+        <td class="row-actions">
+          <button class="icon-btn" onclick="openDeviceModal('${item.id}')">Bearbeiten</button>
+          <button class="icon-btn" onclick="toggleKnxRelevant('${item.id}')">${relevant ? 'Ausblenden' : 'Einblenden'}</button>
+        </td>
       </tr>`;
   }).join('') : `<tr><td colspan="8"><div class="empty-state">Keine Geräte gefunden.</div></td></tr>`;
 
@@ -1284,6 +1332,109 @@ function renderDevicesTable(floor) {
   } else {
     moreEl.style.display = 'none';
   }
+}
+
+// ── Raum-/Geschossstruktur (Baumansicht) ─────────────────────────────────────
+// Objekte einem anderen Raum/Geschoss zuordnen geht bereits über das Bearbeiten-Modal
+// (dm-level/dm-room sind freie Textfelder). Der Mehrwert hier ist (1) die Hierarchie auf
+// einen Blick zu sehen und (2) einen falsch geschriebenen Geschoss-/Raumnamen in einem
+// Schritt für alle betroffenen Objekte zu korrigieren, statt jedes Gerät einzeln zu öffnen.
+function toggleRoomTree() {
+  const el = document.getElementById('room-tree');
+  const show = el.style.display === 'none';
+  el.style.display = show ? 'block' : 'none';
+  if (show) renderRoomTree();
+}
+
+function renderRoomTree() {
+  const el = document.getElementById('room-tree');
+  if (!el || el.style.display === 'none' || !PROJECT) return;
+
+  const byFloor = {};
+  PROJECT.items.forEach(i => {
+    const floor = i.level || 'Unbekannt';
+    const room  = i.room || '(ohne Raum)';
+    if (!byFloor[floor]) byFloor[floor] = {};
+    if (!byFloor[floor][room]) byFloor[floor][room] = [];
+    byFloor[floor][room].push(i);
+  });
+
+  // Baut mit textContent/DOM-APIs statt innerHTML-Templating, weil Geschoss-/Raumnamen
+  // freier Text aus dem Jetplan-Import sind (anders als z.B. item.id) - so kann kein
+  // Anführungszeichen/HTML in einem Namen aus einem onclick-String ausbrechen.
+  el.innerHTML = '';
+  Object.entries(byFloor).forEach(([floor, rooms]) => {
+    const floorCount = Object.values(rooms).reduce((n, arr) => n + arr.length, 0);
+
+    const floorDetails = document.createElement('details');
+    floorDetails.style.marginBottom = '6px';
+    const floorSummary = document.createElement('summary');
+    floorSummary.style.fontSize = '13px';
+    floorSummary.style.fontWeight = '500';
+    floorSummary.append(`${floor} (${floorCount}) `);
+    const floorRenameBtn = document.createElement('button');
+    floorRenameBtn.className = 'icon-btn';
+    floorRenameBtn.style.marginLeft = '8px';
+    floorRenameBtn.textContent = 'Umbenennen';
+    floorRenameBtn.onclick = e => { e.preventDefault(); renameFloor(floor); };
+    floorSummary.appendChild(floorRenameBtn);
+    floorDetails.appendChild(floorSummary);
+
+    const roomsContainer = document.createElement('div');
+    roomsContainer.style.paddingLeft = '1.25rem';
+
+    Object.entries(rooms).forEach(([room, roomItems]) => {
+      const roomDetails = document.createElement('details');
+      roomDetails.style.margin = '4px 0';
+      const roomSummary = document.createElement('summary');
+      roomSummary.style.fontSize = '12px';
+      roomSummary.style.color = 'var(--text-secondary)';
+      roomSummary.append(`${room} (${roomItems.length}) `);
+      const roomRenameBtn = document.createElement('button');
+      roomRenameBtn.className = 'icon-btn';
+      roomRenameBtn.style.marginLeft = '8px';
+      roomRenameBtn.textContent = 'Umbenennen';
+      roomRenameBtn.onclick = e => { e.preventDefault(); renameRoom(floor, room); };
+      roomSummary.appendChild(roomRenameBtn);
+      roomDetails.appendChild(roomSummary);
+
+      const ul = document.createElement('ul');
+      ul.style.paddingLeft = '1.25rem';
+      roomItems.forEach(i => {
+        const li = document.createElement('li');
+        li.style.fontSize = '12px';
+        li.style.padding = '2px 0';
+        li.textContent = `${ELEMENT_LABELS[i.element?.type] || i.element?.type || '–'}: ${i.element?.name || '–'}`;
+        li.onclick = () => openDeviceModal(i.id);
+        ul.appendChild(li);
+      });
+      roomDetails.appendChild(ul);
+      roomsContainer.appendChild(roomDetails);
+    });
+
+    floorDetails.appendChild(roomsContainer);
+    el.appendChild(floorDetails);
+  });
+}
+
+function renameFloor(oldLabel) {
+  const newLabel = (prompt('Neuer Geschoss-Name:', oldLabel) || '').trim();
+  if (!newLabel || newLabel === oldLabel) return;
+  PROJECT.items.forEach(i => { if ((i.level || 'Unbekannt') === oldLabel) i.level = newLabel; });
+  rebuild();
+  renderAll();
+  persistProject();
+}
+
+function renameRoom(floor, oldRoom) {
+  const newRoom = (prompt('Neuer Raum-Name:', oldRoom === '(ohne Raum)' ? '' : oldRoom) || '').trim();
+  if (!newRoom || newRoom === oldRoom) return;
+  PROJECT.items.forEach(i => {
+    if ((i.level || 'Unbekannt') === floor && (i.room || '(ohne Raum)') === oldRoom) i.room = newRoom;
+  });
+  rebuild();
+  renderAll();
+  persistProject();
 }
 
 // ── Device edit modal ────────────────────────────────────────────────────────
