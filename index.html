@@ -626,6 +626,11 @@
             <button class="btn btn-primary" onclick="exportETS()">XML herunterladen</button>
           </div>
           <div class="export-card">
+            <h3>Home Assistant YAML</h3>
+            <p>KNX-Konfiguration für Home Assistant (Licht, Schalter, Rollladen, Heizung, Sensoren, Kontakte). Schema ungeprüft gegen aktuelle HA-Doku — vor Produktiveinsatz testweise laden.</p>
+            <button class="btn" onclick="exportHomeAssistant()">YAML herunterladen</button>
+          </div>
+          <div class="export-card">
             <h3>Gruppenadressenliste</h3>
             <p>CSV-Export aller KNX-Gruppenadressen mit Bezeichnung, Etage und zugeordneten Geräten.</p>
             <button class="btn" onclick="exportCSV()">CSV herunterladen</button>
@@ -2165,6 +2170,125 @@ function exportProjectState() {
     }
   };
   download(`knx-projektstand-${PROJECT.project?.name || 'projekt'}.json`, JSON.stringify(payload, null, 2), 'application/json;charset=utf-8');
+}
+
+// ── Home Assistant Export ─────────────────────────────────────────────────
+// "Use Case 2" aus dem Review-Call: dieselben Objekte/Funktionen/Adressen wie der
+// ETS-Export, nur ein anderes Ausgabeformat. WICHTIG, anders als beim restlichen KNX-
+// Schema: hierfür hat Paul KEINE Referenzdatei geschickt - Plattform/Config-Schlüssel
+// stammen aus allgemeinem Wissen zur Home-Assistant-KNX-Integration, nicht mit Paul oder
+// echter HA-Doku gegengecheckt. Vor Produktiveinsatz: in einer echten HA-Instanz
+// testweise laden (Entwicklerwerkzeuge → YAML neu laden), besonders beim climate-Block,
+// dessen Schema in HA über die Versionen hinweg am meisten Zusatzfelder bekommen hat.
+
+function haEntityName(g) {
+  const objectName = g.items[0]?.element?.name || g.id;
+  return `${g.floor} ${g.rooms[0] || ''} ${objectName}`.replace(/\s+/g, ' ').trim();
+}
+
+// Bildet eine Schaltgruppe auf eine oder mehrere HA-KNX-Entities ab. "multi", weil z.B.
+// ein Verbraucher mit "Messen" in HA ein switch UND mehrere separate sensor-Entities wird
+// (HA-Sensoren sind einwertig) - anders als eine KNX-Gruppenadresse, die mehrere DPTs
+// unter einem Objekt bündeln kann.
+function haEntityFor(g) {
+  const addr = label => g.knxAddresses.find(x => x.label === label)?.address;
+  const name = haEntityName(g);
+
+  if (g.gewerk === 'beleuchtung') {
+    const cfg = { name, address: addr('Schalten'), state_address: addr('Status-Schalten') };
+    if (g.funcKey === 'dimmen') {
+      cfg.brightness_address = addr('Dimmen-absolut');
+      cfg.brightness_state_address = addr('Status-Wert');
+    }
+    return { platform: 'light', config: cfg };
+  }
+  if (g.gewerk === 'verbraucher') {
+    const entities = [{ platform: 'switch', config: { name, address: addr('Schalten'), state_address: addr('Status-Schalten') } }];
+    if (g.funcKey === 'messen') {
+      const sensors = [
+        ['Leistung', 'Leistung', 'power'],
+        ['Strom', 'Strom', 'current'],
+        ['Spannung', 'Spannung', 'electric_potential'],
+        ['Arbeit', 'Arbeit', 'active_energy']
+      ];
+      sensors.forEach(([mittel, suffix, type]) => {
+        if (addr(mittel)) entities.push({ platform: 'sensor', config: { name: `${name} ${suffix}`, state_address: addr(mittel), type } });
+      });
+    }
+    return { multi: entities };
+  }
+  if (g.gewerk === 'beschattung') {
+    return { platform: 'cover', config: {
+      name,
+      move_long_address: addr('Auf-Ab'), stop_address: addr('Stopp'),
+      position_address: addr('Position-Absolut'), position_state_address: addr('Status-Position'),
+      angle_address: addr('Lamellen-Absolut'), angle_state_address: addr('Status-Lamellen')
+    }};
+  }
+  if (g.gewerk === 'heizung') {
+    return { platform: 'climate', config: {
+      name,
+      temperature_address: addr('Isttemperatur'),
+      target_temperature_address: addr('Solltemperatur'), target_temperature_state_address: addr('Solltemperatur-Status'),
+      setpoint_shift_address: addr('Sollwertverschiebung'), setpoint_shift_state_address: addr('Sollwertverschiebung-Status')
+    }};
+  }
+  if (g.gewerk === 'kontakte') {
+    if (g.funcKey === 'fenster_tuer') {
+      const entities = [];
+      if (addr('Verriegelung')) entities.push({ platform: 'binary_sensor', config: { name: `${name} Verriegelung`, state_address: addr('Verriegelung') } });
+      if (addr('Kipp'))         entities.push({ platform: 'binary_sensor', config: { name: `${name} Kipp`,         state_address: addr('Kipp') } });
+      if (addr('Verschluss'))   entities.push({ platform: 'binary_sensor', config: { name: `${name} Verschluss`,   state_address: addr('Verschluss'), device_class: 'window' } });
+      return { multi: entities };
+    }
+    if (g.funcKey === 'alarm')    return { platform: 'binary_sensor', config: { name, state_address: addr('Alarm'), device_class: 'safety' } };
+    if (g.funcKey === 'praesenz') return { platform: 'binary_sensor', config: { name, state_address: addr('Präsenz'), device_class: 'motion' } };
+  }
+  if (g.gewerk === 'umwelt') {
+    if (g.funcKey === 'luft') {
+      const entities = [];
+      if (addr('Temperatur'))       entities.push({ platform: 'sensor', config: { name: `${name} Temperatur`,       state_address: addr('Temperatur'),       type: 'temperature' } });
+      if (addr('Luftfeuchtigkeit')) entities.push({ platform: 'sensor', config: { name: `${name} Luftfeuchtigkeit`, state_address: addr('Luftfeuchtigkeit'), type: 'humidity' } });
+      return { multi: entities };
+    }
+    if (g.funcKey === 'helligkeit') return { platform: 'sensor', config: { name, state_address: addr('Helligkeit'), type: 'illuminance' } };
+  }
+  return null;
+}
+
+function yamlScalar(v) {
+  const s = String(v);
+  return /^[\w .\-\/äöüÄÖÜß]+$/.test(s) ? s : `"${s.replace(/"/g, '\\"')}"`;
+}
+
+// Minimaler YAML-Serializer nur für die hier gebrauchte, flache Struktur
+// (knx: -> Plattform -> Liste von Objekten aus String/Zahl-Werten) - keine allgemeine
+// YAML-Bibliothek eingebunden, da diese App bewusst ohne Build-Schritt/Dependencies läuft.
+function entitiesToYaml(byPlatform) {
+  let yaml = 'knx:\n';
+  Object.entries(byPlatform).forEach(([platform, items]) => {
+    yaml += `  ${platform}:\n`;
+    items.forEach(cfg => {
+      Object.entries(cfg).filter(([, v]) => v != null && v !== '').forEach(([k, v], i) => {
+        yaml += `    ${i === 0 ? '- ' : '  '}${k}: ${yamlScalar(v)}\n`;
+      });
+    });
+  });
+  return yaml;
+}
+
+function exportHomeAssistant() {
+  const d = PROJECT;
+  const byPlatform = {};
+  d.groups.filter(g => g.gewerk && g.knxAddresses.length).forEach(g => {
+    const result = haEntityFor(g);
+    if (!result) return;
+    (result.multi || [result]).forEach(e => { (byPlatform[e.platform] ??= []).push(e.config); });
+  });
+  const header = '# Home Assistant KNX-Konfiguration – erstellt mit Jetplan KNX Konverter\n'
+    + '# Ungeprüft gegen aktuelle HA-Doku – vor Produktiveinsatz testweise laden.\n'
+    + '# Unter der Datei-Struktur knx: in configuration.yaml einbinden oder per !include.\n\n';
+  download(`knx-home-assistant-${d.project?.name || 'export'}.yaml`, header + entitiesToYaml(byPlatform), 'application/x-yaml;charset=utf-8');
 }
 
 // Gruppiert nach Gewerk (= Hauptgruppe) statt wie früher nach Geschoss — Hauptgruppe
