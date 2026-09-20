@@ -283,8 +283,14 @@ drop trigger if exists trg_projects_assign_org_and_enforce_quota on public.proje
 create trigger trg_projects_assign_org_and_enforce_quota before insert on public.projects
   for each row execute function public.assign_org_and_enforce_quota();
 
--- ── Forward-compat note für Phase 2/3 (NOT implemented yet) ──────────────────
--- Stripe-Anbindung kommt als zwei Edge Functions (create-checkout-session,
--- stripe-webhook) + Secrets (STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET,
--- STRIPE_PRICE_ONE_TIME, STRIPE_PRICE_SUBSCRIPTION) — kein weiterer Schema-Umbau nötig,
--- organizations.stripe_*-Spalten und credit_events sind schon dafür vorbereitet.
+-- ═══════════════════════════════════════════════════════════════════════════
+-- Stripe-Anbindung — Phase 2 (Einmalkauf)
+-- ═══════════════════════════════════════════════════════════════════════════
+
+-- Atomares Increment für den stripe-webhook (service-role, umgeht RLS ohnehin) — kein
+-- Read-Modify-Write in JS, damit zwei fast gleichzeitige Webhook-Zustellungen für dieselbe
+-- Org sich nicht gegenseitig überschreiben statt zu addieren.
+create or replace function public.increment_one_time_credits(p_org_id uuid, p_delta int)
+returns void language sql as $$
+  update public.organizations set one_time_credits = one_time_credits + p_delta, updated_at = now() where id = p_org_id;
+$$;

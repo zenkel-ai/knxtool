@@ -6,3 +6,11 @@ project_id = "qmbmskthgxdmybvqyoax"
 # Nur eingeloggte Nutzer:innen (gültiges Supabase-JWT) dürfen die Funktion aufrufen -
 # das ist die eigentliche Zugriffsschranke, siehe supabase/functions/ask-ai/index.ts.
 verify_jwt = true
+
+[functions.create-checkout-session]
+verify_jwt = true
+
+[functions.stripe-webhook]
+# Bewusst false: Stripe hat kein Supabase-JWT. Die echte Absicherung ist Stripes eigene
+# Signaturprüfung im Funktionscode (STRIPE_WEBHOOK_SECRET).
+verify_jwt = false

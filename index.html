@@ -514,6 +514,7 @@
   <!-- Projects Panel -->
   <div id="projects-panel" style="display:none;padding:2rem;">
     <div class="section-title" style="margin-top:0;">Projekte</div>
+    <div id="quota-banner" style="margin-bottom:1.25rem;"></div>
     <div class="table-wrap">
       <table>
         <thead><tr><th>Name</th><th>Unit</th><th>Zuletzt geändert</th><th></th></tr></thead>
@@ -799,6 +800,7 @@ async function handleSession(session) {
     if (error) alert('Konnte Team-Zuordnung nicht laden: ' + error.message);
     showPanel('projects');
     loadProjectsList();
+    loadQuota();
   } else {
     showPanel('auth');
   }
@@ -828,14 +830,41 @@ function showPanel(name) {
   document.getElementById('projects-panel').style.display      = name === 'projects' ? 'block' : 'none';
   document.getElementById('main-panel').style.display           = name === 'app'      ? 'block' : 'none';
   document.getElementById('back-to-projects-btn').style.display = name === 'app'      ? 'inline-block' : 'none';
+  if (name === 'app') maybeShowOnboardingHint();
+}
+
+// Einmaliger Hinweis beim Betreten der Hauptansicht (nicht pro Projekt, sondern pro
+// Browser/Gerät, wie die bevorzugten Aktoren aus der Stückliste) - erklärt den
+// empfohlenen ersten Schritt, statt die Nutzer:in ohne jede Führung vor 6 gleichwertigen
+// Tabs stehen zu lassen.
+const ONBOARDING_HINT_KEY = 'knx-onboarding-hint-dismissed';
+
+function maybeShowOnboardingHint() {
+  if (document.getElementById('onboarding-hint')) return;
+  try { if (localStorage.getItem(ONBOARDING_HINT_KEY)) return; } catch { return; }
+  const banner = document.createElement('div');
+  banner.id = 'onboarding-hint';
+  banner.style.cssText = 'margin:1rem 2rem 0;padding:12px 16px;border:0.5px solid var(--border);border-radius:var(--radius-md);background:var(--bg-secondary);display:flex;gap:12px;align-items:flex-start;';
+  banner.innerHTML = `
+    <div style="flex:1;font-size:12px;color:var(--text-secondary);line-height:1.6;">
+      <strong style="color:var(--text);">Erster Schritt:</strong> Geh zur <strong>Geräteliste</strong> und prüfe, welche Geräte KNX-relevant sind und welches Gewerk/welche Funktion sie haben — daraus entstehen die Schaltgruppen. Ein Blick in <strong>KNX-Empfehlungen</strong> danach lohnt sich meist auch.
+    </div>
+    <button class="icon-btn" onclick="dismissOnboardingHint()">Ausblenden</button>`;
+  document.getElementById('main-panel').prepend(banner);
+}
+
+function dismissOnboardingHint() {
+  document.getElementById('onboarding-hint')?.remove();
+  try { localStorage.setItem(ONBOARDING_HINT_KEY, '1'); } catch {}
 }
 
 async function loadProjectsList() {
+  const tbody = document.getElementById('projects-table');
+  tbody.innerHTML = `<tr><td colspan="4" style="color:var(--text-tertiary);">Lädt…</td></tr>`;
   const { data, error } = await supabaseClient
     .from('projects')
     .select('id,name,unit_code,updated_at')
     .order('updated_at', { ascending: false });
-  const tbody = document.getElementById('projects-table');
   if (error) { tbody.innerHTML = `<tr><td colspan="4">Fehler: ${error.message}</td></tr>`; return; }
   tbody.innerHTML = data.length ? data.map(p => `
     <tr>
@@ -846,12 +875,19 @@ async function loadProjectsList() {
         <button class="btn btn-sm btn-primary" onclick="openProject('${p.id}')">Öffnen</button>
         <button class="btn btn-sm" onclick="deleteProjectRow('${p.id}')">Löschen</button>
       </td>
-    </tr>`).join('') : `<tr><td colspan="4">Noch keine Projekte.</td></tr>`;
+    </tr>`).join('') : `<tr><td colspan="4"><div class="empty-state">Noch keine Projekte — lade unten eine Jetplan-JSON-Datei hoch, um loszulegen.</div></td></tr>`;
 }
 
 async function openProject(id) {
+  const btn = event?.target;
+  const originalText = btn?.textContent;
+  if (btn) { btn.disabled = true; btn.textContent = 'Öffnet…'; }
   const { data, error } = await supabaseClient.from('projects').select('data').eq('id', id).single();
-  if (error) { alert('Projekt konnte nicht geladen werden: ' + error.message); return; }
+  if (error) {
+    alert('Projekt konnte nicht geladen werden: ' + error.message);
+    if (btn) { btn.disabled = false; btn.textContent = originalText; }
+    return;
+  }
   currentProjectId = id;
   processData(data.data);
   showPanel('app');
@@ -859,8 +895,14 @@ async function openProject(id) {
 
 async function deleteProjectRow(id) {
   if (!confirm('Dieses Projekt wirklich unwiderruflich löschen?')) return;
+  const btn = event?.target;
+  if (btn) { btn.disabled = true; btn.textContent = 'Löscht…'; }
   const { error } = await supabaseClient.from('projects').delete().eq('id', id);
-  if (error) { alert('Löschen fehlgeschlagen: ' + error.message); return; }
+  if (error) {
+    alert('Löschen fehlgeschlagen: ' + error.message);
+    if (btn) { btn.disabled = false; btn.textContent = 'Löschen'; }
+    return;
+  }
   loadProjectsList();
 }
 
@@ -872,7 +914,14 @@ async function handleNewProjectFile(json) {
     .from('projects')
     .insert({ name: project.name || 'Unbenanntes Projekt', unit_code: unit.unitCode || null, data: payload, created_by: currentUser.id })
     .select('id').single();
-  if (error) { alert('Projekt konnte nicht angelegt werden: ' + error.message); return; }
+  if (error) {
+    if (error.message?.includes('QUOTA_EXCEEDED')) {
+      alert('Kein Projekt-Kontingent mehr verfügbar. Bitte oben in der Projektliste ein Einzelprojekt kaufen.');
+    } else {
+      alert('Projekt konnte nicht angelegt werden: ' + error.message);
+    }
+    return;
+  }
   currentProjectId = data.id;
   processData(payload);
   showPanel('app');
@@ -883,7 +932,60 @@ function backToProjects() {
   PROJECT = null;
   showPanel('projects');
   loadProjectsList();
+  loadQuota();
 }
+
+// ── Kontingent/Bezahlung ──────────────────────────────────────────────────
+// project_credits ist eine generierte Spalte (one_time_credits + subscription_credits,
+// siehe schema.sql) — RLS beschränkt das select automatisch auf die eigene Org
+// (current_org_id()), kein .eq() nötig.
+async function loadQuota() {
+  const el = document.getElementById('quota-banner');
+  const { data, error } = await supabaseClient
+    .from('organizations').select('one_time_credits, subscription_credits, project_credits').single();
+  if (error || !data) { el.innerHTML = ''; return; }
+  const remaining = data.project_credits;
+  const detail = data.subscription_credits > 0 ? ` (${data.subscription_credits} aus Jahresplan)` : '';
+  el.innerHTML = `
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 14px;border:0.5px solid var(--border);border-radius:var(--radius-md);background:var(--bg-secondary);">
+      <span style="font-size:12px;color:var(--text-secondary);flex:1;">
+        ${remaining > 0 ? `${remaining} Projekt${remaining === 1 ? '' : 'e'} verfügbar${detail}` : 'Kein Projekt-Kontingent mehr verfügbar'}
+      </span>
+      <button class="btn btn-sm" onclick="startCheckout('one_time')">+ Einzelprojekt (219€)</button>
+    </div>`;
+}
+
+async function startCheckout(planType) {
+  const btn = event?.target;
+  const originalText = btn?.textContent;
+  if (btn) { btn.disabled = true; btn.textContent = 'Wird geladen…'; }
+  const { data, error } = await supabaseClient.functions.invoke('create-checkout-session', { body: { planType } });
+  if (error) {
+    const detail = await error.context?.json?.().catch(() => null);
+    alert('Checkout konnte nicht gestartet werden: ' + (detail?.error || error.message));
+    if (btn) { btn.disabled = false; btn.textContent = originalText; }
+    return;
+  }
+  if (data?.error) {
+    alert('Checkout konnte nicht gestartet werden: ' + data.error);
+    if (btn) { btn.disabled = false; btn.textContent = originalText; }
+    return;
+  }
+  if (data?.url) window.location.href = data.url;
+}
+
+// Rückkehr von Stripe (success_url/cancel_url aus create-checkout-session) — Query-Param
+// nur zur Anzeige, keine sicherheitsrelevante Bedeutung (die eigentliche Kontingent-
+// Gutschrift kommt ausschließlich über den serverseitigen Webhook, nicht über diesen Redirect).
+(function handleCheckoutReturn() {
+  const params = new URLSearchParams(window.location.search);
+  const checkout = params.get('checkout');
+  if (!checkout) return;
+  history.replaceState(null, '', window.location.pathname);
+  if (checkout === 'success') {
+    setTimeout(() => { alert('Kauf erfolgreich! Kontingent wird in Kürze aktualisiert.'); loadQuota(); }, 500);
+  }
+})();
 
 // ── Constants ──────────────────────────────────────────────────────────────
 const ELEMENT_LABELS = {
@@ -1452,7 +1554,7 @@ function renderSwitches() {
           </div>`).join('')}
       </div>
     </div>
-  `).join('') : `<div class="empty-state">Noch keine Taster angelegt.</div>`;
+  `).join('') : `<div class="empty-state">Noch keine Taster angelegt — oben auf "+ Neuer Taster" klicken, um loszulegen.</div>`;
 }
 
 // ── Stückliste (BOM) ──────────────────────────────────────────────────────
@@ -1709,7 +1811,7 @@ function renderGroupsTable(floor) {
       <td style="font-weight:500;">${g.items.length}</td>
       <td>${g.knxAddresses.length ? `<div class="knx-addr-list">${g.knxAddresses.map(a => `<span>${a.label}: <code>${a.address}</code></span>`).join('')}</div>` : `<span style="color:var(--text-tertiary);font-size:11px;">${g.gewerk ? 'Adressbereich unvollständig' : 'kein Gewerk'}</span>`}</td>
     </tr>
-  `).join('') : `<tr><td colspan="7"><div class="empty-state">Keine Gruppen gefunden.</div></td></tr>`;
+  `).join('') : `<tr><td colspan="7"><div class="empty-state">Keine Schaltgruppen gefunden. Weise in der Geräteliste passenden Geräten eine Gruppen-ID sowie Gewerk/Funktion zu, damit hier Adressen erscheinen.</div></td></tr>`;
 }
 
 // ── Devices ────────────────────────────────────────────────────────────────
@@ -1789,7 +1891,11 @@ function renderDevicesTable(floor) {
           <button class="icon-btn" onclick="toggleKnxRelevant('${item.id}')">${relevant ? 'Ausblenden' : 'Einblenden'}</button>
         </td>
       </tr>`;
-  }).join('') : `<tr><td colspan="8"><div class="empty-state">Keine Geräte gefunden.</div></td></tr>`;
+  }).join('') : `<tr><td colspan="8"><div class="empty-state">${
+    q ? 'Keine Geräte für diese Suche gefunden.'
+      : deviceRelevanceFilter === 'relevant' ? 'Keine relevanten Geräte gefunden — oben auf "Alle anzeigen" umschalten, falls Geräte als nicht relevant markiert sind.'
+      : 'Keine Geräte gefunden.'
+  }</div></td></tr>`;
 
   const moreEl = document.getElementById('devices-more');
   if (items.length > LIMIT) {
