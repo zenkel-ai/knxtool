@@ -787,11 +787,16 @@ async function initAuth() {
   supabaseClient.auth.onAuthStateChange((_event, session) => handleSession(session));
 }
 
-function handleSession(session) {
+// bootstrap_org() (Postgres-Funktion, siehe schema.sql) ordnet den Nutzer einer Firma/
+// einem Team zu (bestehend oder neu) - muss vor loadProjectsList() abgeschlossen sein,
+// sonst liefert RLS eine leere Liste (current_org_id() wäre noch null).
+async function handleSession(session) {
   currentUser = session?.user || null;
   document.getElementById('header-right').style.display = currentUser ? 'flex' : 'none';
   document.getElementById('user-email').textContent = currentUser?.email || '';
   if (currentUser) {
+    const { error } = await supabaseClient.rpc('bootstrap_org');
+    if (error) alert('Konnte Team-Zuordnung nicht laden: ' + error.message);
     showPanel('projects');
     loadProjectsList();
   } else {
