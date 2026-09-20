@@ -657,14 +657,13 @@
       </select>
     </div>
     <div class="form-row">
+      <label>KNX-Gewerk</label>
+      <select id="dm-gewerk" onchange="onDeviceGewerkChange()"></select>
+      <div class="hint">Wird aus dem Typ vorgeschlagen, lässt sich aber frei umstellen — Jetplans Typen kennen z.B. Heizung/Kontakte/Umwelt nicht.</div>
+    </div>
+    <div class="form-row">
       <label>KNX-Funktion</label>
-      <select id="dm-function">
-        <option value="">– keine (nicht KNX-gesteuert) –</option>
-        <option value="schalten">Schalten</option>
-        <option value="dimmen">Dimmen (Licht dimmbar)</option>
-        <option value="jalousie">Jalousie/Rollladen</option>
-        <option value="messen">Schalten + Messen (Energie)</option>
-      </select>
+      <select id="dm-function"></select>
       <div class="hint">Bestimmt, welche KNX-Gruppenadressen (Schalten/Dimmen/Position …) für die zugeordnete Gruppe erzeugt werden.</div>
     </div>
     <div class="form-row">
@@ -838,42 +837,144 @@ const ELEMENT_LABELS = {
   lightningProtection: 'Blitzschutz'
 };
 
-// KNX-Funktionstypen: bestimmen, welche Gruppenadressen (DPTs) pro Schaltgruppe
-// erzeugt werden. Jetplan selbst kennt nur grobe Elementtypen (z.B. "lighting"),
-// nicht ob eine Leuchte dimmbar ist oder ein Anschluss eine Jalousie ansteuert –
-// das wird per inferKnxFunction() geraten oder manuell über das Bearbeiten-Modal
-// gesetzt (item.knxFunction) und überschreibt die Schätzung.
-const FUNCTION_TYPES = {
-  schalten: {
-    label: 'Schalten', badge: 'switch',
-    dpts: [ { key: 'schalten', label: 'Schalten', dpt: '1.001', offset: 0 } ]
+// ── KNX-Referenzdaten (Paul, Neudecker Elektrotechnik, siehe knx-reference/*.json) ──────
+// Hauptgruppe/Mittelgruppe-Nummern+Namen und welche Mittelgruppen eine Funktion aktiviert
+// sind 1:1 aus diesen Dateien übernommen (gpa_structure.json, gpa_mapping.json,
+// function_catalog.json) — NICHT selbst geraten. DPT-Typen stehen in keiner der drei
+// Dateien; wo Paul sie im Review-Call genannt hat (Schalten/Dimmen-relativ/-absolut/
+// Auf-Ab/Stopp/Leistung), sind sie übernommen. Der Rest sind KNX-Standard-Datenpunkttypen
+// für den jeweiligen Werttyp (Prozent/Temperatur/Strom/…), aber nicht einzeln mit Paul
+// gegengecheckt — bei Bedarf vor Produktiveinsatz kurz bestätigen lassen.
+const GA_SCHEME = {
+  beleuchtung: {
+    hauptgruppe: 1,
+    mittel: {
+      1: { name: 'Schalten',        dpt: '1.001' },
+      2: { name: 'Dimmen-relativ',  dpt: '3.007' },
+      3: { name: 'Dimmen-absolut',  dpt: '5.001' },
+      4: { name: 'Status-Schalten', dpt: '1.001' },
+      5: { name: 'Status-Wert',     dpt: '5.001' },
+      6: { name: 'Extra',           dpt: null }, // z.B. RGBW — noch keine Zuordnung in gpa_mapping.json
+      7: { name: 'Sperre',          dpt: '1.003' }
+    },
+    functions: {
+      schalten: { counterScope: 'beleuchtung', mittel: [1, 4, 7] },
+      dimmen:   { counterScope: 'beleuchtung', mittel: [1, 2, 3, 4, 5, 7] }
+      // rgbw: in function_catalog.json gelistet, aber (noch) keine gpa_mapping.json-Zuordnung
+    }
   },
-  dimmen: {
-    label: 'Dimmen', badge: 'dimmen',
-    dpts: [
-      { key: 'schalten', label: 'Schalten',          dpt: '1.001', offset: 0 },
-      { key: 'dimmen',   label: 'Dimmen (relativ)',  dpt: '3.007', offset: 1 },
-      { key: 'wert',     label: 'Helligkeitswert %', dpt: '5.001', offset: 2 }
-    ]
+  verbraucher: {
+    hauptgruppe: 2,
+    mittel: {
+      1: { name: 'Schalten',        dpt: '1.001' },
+      2: { name: 'Status-Schalten', dpt: '1.001' },
+      3: { name: 'Leistung',        dpt: '9.024' },
+      4: { name: 'Strom',           dpt: '9.021' },
+      5: { name: 'Spannung',        dpt: '9.020' },
+      6: { name: 'Arbeit',          dpt: '13.010' },
+      7: { name: 'Sperre',          dpt: '1.003' }
+    },
+    functions: {
+      schalten: { counterScope: 'verbraucher', mittel: [1, 2, 7] },
+      messen:   { counterScope: 'verbraucher', mittel: [1, 2, 3, 4, 5, 6, 7] }
+    }
   },
-  jalousie: {
-    label: 'Jalousie/Rollladen', badge: 'jalousie',
-    dpts: [
-      { key: 'aufab',    label: 'Auf/Ab',          dpt: '1.008', offset: 0 },
-      { key: 'stopp',    label: 'Stopp/Schritt',   dpt: '1.007', offset: 1 },
-      { key: 'position', label: 'Position %',      dpt: '5.001', offset: 2 },
-      { key: 'lamelle',  label: 'Lamellenwert %',  dpt: '5.001', offset: 3 }
-    ]
+  beschattung: {
+    hauptgruppe: 3,
+    mittel: {
+      1: { name: 'Auf-Ab',           dpt: '1.008' },
+      2: { name: 'Stopp',            dpt: '1.007' },
+      3: { name: 'Position-Absolut', dpt: '5.001' },
+      4: { name: 'Lamellen-Absolut', dpt: '5.001' },
+      5: { name: 'Status-Position',  dpt: '5.001' },
+      6: { name: 'Status-Lamellen',  dpt: '5.001' },
+      7: { name: 'Sperre',           dpt: '1.003' }
+    },
+    functions: {
+      rolladen: { counterScope: 'beschattung', mittel: [1, 2, 3, 4, 5, 6, 7] },
+      jalousie: { counterScope: 'beschattung', mittel: [1, 2, 3, 4, 5, 6, 7] }
+    }
   },
-  messen: {
-    label: 'Schalten + Messen', badge: 'messen',
-    dpts: [
-      { key: 'schalten', label: 'Schalten',        dpt: '1.001', offset: 0 },
-      { key: 'leistung', label: 'Wirkleistung',    dpt: '9.024', offset: 1 }
-    ]
+  heizung: {
+    hauptgruppe: 4,
+    mittel: {
+      1: { name: 'Isttemperatur',              dpt: '9.001' },
+      2: { name: 'Solltemperatur',              dpt: '9.001' },
+      3: { name: 'Solltemperatur-Status',       dpt: '9.001' },
+      4: { name: 'Sollwertverschiebung',        dpt: '6.010' }, // DPT hier unsicher, siehe Kommentarkopf
+      5: { name: 'Sollwertverschiebung-Status', dpt: '6.010' },
+      6: { name: 'Stellwert-Status',            dpt: '5.001' }
+    },
+    functions: {
+      heizen:  { counterScope: 'heizung', mittel: [1, 2, 3, 4, 5, 6] },
+      kuehlen: { counterScope: 'heizung', mittel: [1, 2, 3, 4, 5, 6] }
+    }
+  },
+  kontakte: {
+    hauptgruppe: 5,
+    mittel: {
+      1: { name: 'Verriegelung', dpt: '1.001' },
+      2: { name: 'Kipp',         dpt: '1.001' },
+      3: { name: 'Verschluss',   dpt: '1.001' },
+      4: { name: 'Alarm',        dpt: '1.005' },
+      5: { name: 'Präsenz',      dpt: '1.001' }
+    },
+    functions: {
+      // Fenster/Tür-Zustände teilen sich einen Objekt-Index (siehe assignObjectIndexes),
+      // Alarm und Präsenz zählen davon unabhängig — genau wie im Review-Call beschrieben.
+      fenster_tuer: { counterScope: 'kontakte_fenster_tuer', mittel: [1, 2, 3] },
+      alarm:        { counterScope: 'kontakte_alarm',        mittel: [4] },
+      praesenz:     { counterScope: 'kontakte_praesenz',     mittel: [5] }
+    }
+  },
+  umwelt: {
+    hauptgruppe: 10,
+    mittel: {
+      1: { name: 'Temperatur',       dpt: '9.001' },
+      2: { name: 'Luftfeuchtigkeit', dpt: '9.007' },
+      5: { name: 'Helligkeit',       dpt: '9.004' }
+      // 3 CO2 / 4 VOC / 6 Wind / 7 Regen: in gpa_structure.json reserviert, aber keine
+      // Funktion in function_catalog.json/gpa_mapping.json aktiviert sie bisher
+    },
+    functions: {
+      luft:       { counterScope: 'umwelt', mittel: [1, 2] },
+      helligkeit: { counterScope: 'umwelt', mittel: [5] }
+    }
   }
 };
-const FUNCTION_PRIORITY = ['jalousie', 'messen', 'dimmen', 'schalten'];
+
+const GEWERK_LABELS = {
+  beleuchtung: 'Beleuchtung', verbraucher: 'Verbraucher', beschattung: 'Beschattung',
+  heizung: 'Heizung', kontakte: 'Kontakte', umwelt: 'Umwelt'
+};
+const FUNCTION_LABELS = {
+  schalten: 'Schalten', dimmen: 'Dimmen', messen: 'Messen',
+  rolladen: 'Rolladen', jalousie: 'Jalousie', heizen: 'Heizen', kuehlen: 'Kühlen',
+  fenster_tuer: 'Fenster-Tür', alarm: 'Alarm', praesenz: 'Präsenz',
+  luft: 'Luft', helligkeit: 'Helligkeit'
+};
+// Wiederverwendung bestehender Badge-Farben (siehe .badge-* in <style>) statt neuer CSS —
+// die Funktion-Badge in Schaltgruppen/Geräteliste färbt sich nach Gewerk, nicht mehr nach
+// Einzelfunktion.
+const GEWERK_BADGE = {
+  beleuchtung: 'lighting', verbraucher: 'socket', beschattung: 'jalousie',
+  heizung: 'lightningProtection', kontakte: 'smarthome', umwelt: 'data'
+};
+// Nur Funktionen, die tatsächlich Adressen erzeugen (GA_SCHEME[gewerk].functions), sind
+// wählbar — rgbw fehlt hier bewusst, siehe Kommentar bei GA_SCHEME.beleuchtung.
+const FUNCTION_CATALOG = Object.fromEntries(
+  Object.entries(GA_SCHEME).map(([gewerk, def]) => [gewerk, Object.keys(def.functions)])
+);
+
+// Jetplan-Typ/-Name → Gewerk-Vorschlag. Jetplans eigene Typen (siehe ELEMENT_LABELS)
+// kennen Heizung/Kontakte/Umwelt nicht — das Gewerk-Feld im Bearbeiten-Modal bleibt
+// deshalb frei umstellbar, das hier ist nur der Auto-Vorschlag beim ersten Öffnen.
+function defaultGewerkFor(type, name) {
+  if (type === 'lighting') return 'beleuchtung';
+  if (type === 'socket' || type === 'switch') return 'verbraucher';
+  if (type === 'terminal' && name === 'rollladenmotor') return 'beschattung';
+  return null;
+}
 
 // ── File handling ──────────────────────────────────────────────────────────
 const dropZone  = document.getElementById('drop-zone');
@@ -918,6 +1019,7 @@ function processData(json) {
   };
 
   rebuild();
+  persistProject(); // neu vergebene KNX-Objekt-Indizes sofort sichern, nicht erst beim nächsten Edit
 
   document.getElementById('project-badge').textContent =
     `${project.name || '–'} / ${unit.unitCode || '–'}`;
@@ -957,25 +1059,36 @@ function rebuild() {
     }
   }
 
-  const groups = Object.values(byGroup).map((g, i) => {
-    const funcs = new Set(g.items.map(effectiveFunction).filter(Boolean));
-    const func  = FUNCTION_PRIORITY.find(f => funcs.has(f)) || 'schalten';
-    return {
-      ...g,
-      rooms: [...g.rooms].filter(Boolean),
-      types: [...g.types],
-      function: func,
-      knxAddresses: generateKNXAddresses(g.id, i, func)
-    };
+  const groupList = Object.values(byGroup).map(g => {
+    const rooms = [...g.rooms].filter(Boolean);
+    const types = [...g.types];
+    const firstIndex = items.indexOf(g.items[0]);
+    const { gewerk, func } = resolveGroupGewerkFunction(g);
+    return { ...g, rooms, types, firstIndex, gewerk, funcKey: func };
   });
+
+  const knxWarnings = assignObjectIndexes(groupList);
+
+  const groups = groupList.map(g => ({
+    ...g,
+    gewerkLabel: g.gewerk ? (GEWERK_LABELS[g.gewerk] || g.gewerk) : null,
+    functionLabel: g.funcKey ? (FUNCTION_LABELS[g.funcKey] || g.funcKey) : null,
+    knxAddresses: generateGroupAddresses(g.gewerk, g.funcKey, g.objectIndex)
+  }));
+
+  const unresolved = groups.filter(g => !g.gewerk);
+  if (unresolved.length) {
+    knxWarnings.push(`${unresolved.length} Schaltgruppe(n) ohne erkennbares KNX-Gewerk (${unresolved.slice(0, 5).map(g => g.id).join(', ')}${unresolved.length > 5 ? ' u.a.' : ''}) — keine Adressen erzeugt. Gewerk/Funktion über "Bearbeiten" bei einem der Geräte in der Gruppe manuell setzen.`);
+  }
 
   PROJECT.byFloor = byFloor;
   PROJECT.byType  = byType;
   PROJECT.groups  = groups;
+  PROJECT.knxWarnings = knxWarnings;
   PROJECT.smarthomeItems    = items.filter(i => i.element?.type === 'smarthome');
   PROJECT.lightingItems     = items.filter(i => i.element?.type === 'lighting');
   PROJECT.ungroupedLighting = items.filter(i => i.element?.type === 'lighting' && (!i.groupIds || !i.groupIds.length));
-  PROJECT.ungroupedBlinds   = items.filter(i => effectiveFunction(i) === 'jalousie' && (!i.groupIds || !i.groupIds.length));
+  PROJECT.ungroupedBlinds   = items.filter(i => effectiveGewerk(i) === 'beschattung' && (!i.groupIds || !i.groupIds.length));
 }
 
 // Objekt-Fokus-Filter: ob ein Objekt für die KNX-Planung überhaupt relevant ist (z.B.
@@ -1004,32 +1117,118 @@ function toggleRelevanceFilter() {
   renderDevicesTable(activeFloorDevice);
 }
 
-// Ermittelt die KNX-Funktion eines Elements: manuell gesetzt (item.knxFunction, über
-// das Bearbeiten-Modal) geht vor automatischer Schätzung aus Jetplan-Typ/-Name.
-// Jetplan kennzeichnet z.B. Rollladenmotoren nur als generischen Typ "terminal" –
-// ohne diese Zuordnung würden sie in der KNX-Planung schlicht nicht auftauchen.
-function effectiveFunction(item) {
-  if (item.knxFunction) return item.knxFunction;
-  const type = item.element?.type;
-  const name = item.element?.name;
-  if (type === 'terminal' && name === 'rollladenmotor') return 'jalousie';
-  if (type === 'lighting' || type === 'socket' || type === 'switch') return 'schalten';
-  return null;
+// Ermittelt das KNX-Gewerk eines Elements: manuell gesetzt (item.knxGewerk, über das
+// Bearbeiten-Modal) geht vor dem Auto-Vorschlag aus Jetplan-Typ/-Name (defaultGewerkFor).
+function effectiveGewerk(item) {
+  if (item.knxGewerk) return item.knxGewerk;
+  return defaultGewerkFor(item.element?.type, item.element?.name);
 }
 
-// Erzeugt für eine Schaltgruppe einen Satz Gruppenadressen passend zur Funktion
-// (z.B. 4 Adressen für Jalousie: Auf/Ab, Stopp, Position, Lamelle). Die Basis-Nummer
-// wird mit 10 multipliziert, um innerhalb der Untergruppe Platz für die Sub-Adressen
-// je Funktion zu schaffen (schalten+0, dimmen+1, wert+2, usw.).
-function generateKNXAddresses(groupId, index, functionKey) {
-  const floorMap  = { DG: 3, OG: 2, EG: 1, Keller: 0, KE: 0 };
-  const floorKey  = groupId.match(/^([A-Za-z]+)/)?.[1]?.toUpperCase() || 'XX';
-  const numMatch  = groupId.match(/(\d+)$/)?.[1];
-  const num       = numMatch ? parseInt(numMatch, 10) : (index + 1);
-  const f         = floorMap[floorKey] ?? 9;
-  const base      = num * 10;
-  const defs      = (FUNCTION_TYPES[functionKey] || FUNCTION_TYPES.schalten).dpts;
-  return defs.map(d => ({ ...d, address: `1/${f}/${base + d.offset}` }));
+// Ermittelt die KNX-Funktion eines Elements: manuell gesetzt (item.knxFunction, über das
+// Bearbeiten-Modal) geht vor der ersten Funktion, die der Katalog für das (ggf. per
+// effectiveGewerk ermittelte) Gewerk anbietet.
+function effectiveFunction(item) {
+  if (item.knxFunction) return item.knxFunction;
+  const gewerk = effectiveGewerk(item);
+  return gewerk ? (FUNCTION_CATALOG[gewerk]?.[0] || null) : null;
+}
+
+// Löst für eine Schaltgruppe (mehrere Objekte können dieselbe Gruppen-ID teilen) EIN
+// gemeinsames Gewerk+Funktion auf. Im Normalfall haben alle Mitglieder einer Gruppe
+// dieselbe Zuordnung; bei Mischbestückung gewinnt das erste Objekt mit einer im
+// GA_SCHEME tatsächlich vorhandenen Gewerk/Funktion-Kombination (deterministisch, da
+// die Objektreihenfolge stabil ist).
+function resolveGroupGewerkFunction(group) {
+  for (const item of group.items) {
+    const gewerk = effectiveGewerk(item);
+    if (!gewerk) continue;
+    const func = effectiveFunction(item);
+    if (func && GA_SCHEME[gewerk]?.functions?.[func]) return { gewerk, func };
+  }
+  return { gewerk: null, func: null };
+}
+
+// Geschoss-Sortierung für die Objekt-Index-Vergabe (siehe assignObjectIndexes). Unbekannte
+// Geschossnamen sortieren ans Ende, untereinander in Fundreihenfolge.
+const FLOOR_ORDER = { KELLER: 0, KG: 0, UG: 0, KE: 0, EG: 1, OG: 2, '1.OG': 2, '2.OG': 3, OG2: 3, DG: 4 };
+function floorRank(floorLabel, seenOrder) {
+  const key = (floorLabel || '').trim().toUpperCase();
+  if (key in FLOOR_ORDER) return FLOOR_ORDER[key];
+  if (!seenOrder.has(floorLabel)) seenOrder.set(floorLabel, seenOrder.size);
+  return 100 + seenOrder.get(floorLabel);
+}
+
+// Vergibt jeder Schaltgruppe einen stabilen Objekt-Index (1-255) je counterScope (siehe
+// GA_SCHEME.*.functions.*.counterScope) — EINMAL vergeben, NIE wieder geändert, weil die
+// erzeugten Adressen irgendwann in echte KNX-Hardware programmiert werden. Läuft physisch
+// geordnet (Geschoss, dann Fundreihenfolge), springt bei Geschosswechsel auf den nächsten
+// Zehner als Puffer für spätere Ergänzungen. Bereits vergebene Indizes
+// (item.knxIndexByGroup) werden nur gelesen, nie neu vergeben — nur Gruppen ohne
+// bestehenden Index bekommen den nächsten freien.
+function assignObjectIndexes(groupList) {
+  const warnings = [];
+  const byScope = {};
+  groupList.forEach(g => {
+    if (!g.gewerk || !g.funcKey) return;
+    const scope = GA_SCHEME[g.gewerk].functions[g.funcKey].counterScope;
+    (byScope[scope] ??= []).push(g);
+  });
+
+  const seenFloors = new Map();
+  Object.entries(byScope).forEach(([scope, groups]) => {
+    groups.sort((a, b) => floorRank(a.floor, seenFloors) - floorRank(b.floor, seenFloors) || a.firstIndex - b.firstIndex);
+
+    let running = 0;
+    let maxUsed = 0;
+    let lastFloorRank = null;
+    groups.forEach(g => {
+      const existing = g.items.reduce((idx, item) => idx ?? item.knxIndexByGroup?.[g.id], undefined);
+      const fr = floorRank(g.floor, seenFloors);
+      if (existing != null) {
+        g.items.forEach(item => { (item.knxIndexByGroup ??= {})[g.id] = existing; });
+        g.objectIndex = existing;
+        running = Math.max(running, existing);
+        maxUsed = Math.max(maxUsed, existing);
+        lastFloorRank = fr;
+        return;
+      }
+      let candidate = (lastFloorRank !== null && fr !== lastFloorRank)
+        ? (Math.floor(running / 10) + 1) * 10
+        : running + 1;
+      if (candidate <= maxUsed) {
+        candidate = maxUsed + 1;
+        warnings.push(`${GEWERK_LABELS[g.gewerk] || scope}: Geschoss-Puffer bei "${g.floor}" übersprungen (Index-Bereich schon belegt) — Adressen bleiben eindeutig, nur ohne die übliche Zehner-Lücke.`);
+      }
+      if (candidate > 255) {
+        warnings.push(`${GEWERK_LABELS[g.gewerk] || scope}: über 255 Objekte in einer Zählgruppe — "${g.id}" bekommt keine KNX-Adresse (KNX-Grenze für die Adress-Ebene).`);
+        g.objectIndex = null;
+        return;
+      }
+      g.items.forEach(item => { (item.knxIndexByGroup ??= {})[g.id] = candidate; });
+      g.objectIndex = candidate;
+      running = candidate;
+      maxUsed = Math.max(maxUsed, candidate);
+      lastFloorRank = fr;
+    });
+  });
+  return warnings;
+}
+
+// Erzeugt aus Gewerk+Funktion+Objekt-Index die konkreten Gruppenadressen: Hauptgruppe aus
+// GA_SCHEME, Mittelgruppe(n) aus GA_SCHEME[gewerk].functions[func].mittel, Adresse = der
+// stabile Objekt-Index. Liefert bewusst keine Adresse (statt einer geratenen), wenn
+// Gewerk/Funktion/Index fehlt oder eine Mittelgruppe noch kein DPT hat (z.B. "Extra").
+function generateGroupAddresses(gewerk, func, objectIndex) {
+  const def = GA_SCHEME[gewerk];
+  const funcDef = def?.functions?.[func];
+  if (!def || !funcDef || objectIndex == null) return [];
+  return funcDef.mittel
+    .map(m => ({ mittel: m, ...def.mittel[m] }))
+    .filter(m => m.dpt)
+    .map(m => ({
+      key: m.name, label: m.name, dpt: m.dpt,
+      address: `${def.hauptgruppe}/${m.mittel}/${objectIndex}`
+    }));
 }
 
 // ── Persistence (Supabase) ───────────────────────────────────────────────────
@@ -1127,7 +1326,7 @@ function renderOverview() {
     </div>
     <div class="stat-card">
       <div class="stat-label">Jalousien</div>
-      <div class="stat-value">${d.items.filter(i => effectiveFunction(i) === 'jalousie').length}</div>
+      <div class="stat-value">${d.items.filter(i => effectiveGewerk(i) === 'beschattung').length}</div>
       <div class="stat-sub">${d.ungroupedBlinds.length ? d.ungroupedBlinds.length + ' ohne Gruppe' : 'Rollladen/Markise'}</div>
     </div>
     <div class="stat-card">
@@ -1207,7 +1406,7 @@ function groupSortValue(g, key) {
     case 'floor':    return g.floor.toLowerCase();
     case 'rooms':    return g.rooms.join(',').toLowerCase();
     case 'types':    return g.types.join(',').toLowerCase();
-    case 'function': return FUNCTION_TYPES[g.function].label.toLowerCase();
+    case 'function': return (g.functionLabel || '').toLowerCase();
     case 'count':    return g.items.length;
     default:         return '';
   }
@@ -1219,7 +1418,7 @@ function renderGroupsTable(floor) {
   const q = (document.getElementById('group-search')?.value || '').trim().toLowerCase();
   if (q) {
     groups = groups.filter(g => {
-      const hay = [g.id, g.floor, g.rooms.join(' '), g.types.join(' '), FUNCTION_TYPES[g.function].label,
+      const hay = [g.id, g.floor, g.rooms.join(' '), g.types.join(' '), g.functionLabel || '',
         g.knxAddresses.map(a => a.address).join(' ')].join(' ').toLowerCase();
       return hay.includes(q);
     });
@@ -1240,9 +1439,9 @@ function renderGroupsTable(floor) {
       <td>${g.floor}</td>
       <td style="font-size:12px;color:var(--text-secondary);max-width:220px;">${g.rooms.join(', ') || '–'}</td>
       <td>${g.types.map(t => `<span class="badge badge-${t}">${ELEMENT_LABELS[t] || t}</span>`).join(' ')}</td>
-      <td><span class="badge badge-${FUNCTION_TYPES[g.function].badge}">${FUNCTION_TYPES[g.function].label}</span></td>
+      <td>${g.gewerk ? `<span class="badge badge-${GEWERK_BADGE[g.gewerk]}">${g.functionLabel}</span>` : `<span style="color:var(--text-tertiary);">–</span>`}</td>
       <td style="font-weight:500;">${g.items.length}</td>
-      <td><div class="knx-addr-list">${g.knxAddresses.map(a => `<span>${a.label}: <code>${a.address}</code></span>`).join('')}</div></td>
+      <td>${g.knxAddresses.length ? `<div class="knx-addr-list">${g.knxAddresses.map(a => `<span>${a.label}: <code>${a.address}</code></span>`).join('')}</div>` : `<span style="color:var(--text-tertiary);font-size:11px;">${g.gewerk ? 'Adressbereich unvollständig' : 'kein Gewerk'}</span>`}</td>
     </tr>
   `).join('') : `<tr><td colspan="7"><div class="empty-state">Keine Gruppen gefunden.</div></td></tr>`;
 }
@@ -1266,7 +1465,7 @@ function filterDevices(btn, floor) {
 function deviceSortValue(item, key) {
   switch (key) {
     case 'type':     return (ELEMENT_LABELS[item.element?.type] || item.element?.type || '').toLowerCase();
-    case 'function': { const f = effectiveFunction(item); return f ? FUNCTION_TYPES[f].label.toLowerCase() : ''; }
+    case 'function': { const f = effectiveFunction(item); return f ? (FUNCTION_LABELS[f] || '').toLowerCase() : ''; }
     case 'name':     return (item.element?.name || '').toLowerCase();
     case 'level':    return (item.level || '').toLowerCase();
     case 'room':     return (item.room || '').toLowerCase();
@@ -1287,7 +1486,7 @@ function renderDevicesTable(floor) {
     items = items.filter(i => {
       const f = effectiveFunction(i);
       const hay = [i.element?.name, i.element?.type, i.level, i.room, i.fuse,
-        (i.groupIds || []).join(' '), f ? FUNCTION_TYPES[f].label : ''].join(' ').toLowerCase();
+        (i.groupIds || []).join(' '), f ? (FUNCTION_LABELS[f] || '') : ''].join(' ').toLowerCase();
       return hay.includes(q);
     });
   }
@@ -1305,9 +1504,10 @@ function renderDevicesTable(floor) {
   document.getElementById('devices-table').innerHTML = show.length ? show.map(item => {
     const type = item.element?.type || 'other';
     const func = effectiveFunction(item);
+    const gewerk = effectiveGewerk(item);
     const relevant = isKnxRelevant(item);
     const funcBadge = func
-      ? `<span class="badge badge-${FUNCTION_TYPES[func].badge}">${FUNCTION_TYPES[func].label}</span>`
+      ? `<span class="badge badge-${GEWERK_BADGE[gewerk] || 'terminal'}">${FUNCTION_LABELS[func] || func}</span>`
       : `<span style="color:var(--text-tertiary);">–</span>`;
     return `
       <tr class="${relevant ? '' : 'row-dimmed'}">
@@ -1438,6 +1638,44 @@ function renameRoom(floor, oldRoom) {
 }
 
 // ── Device edit modal ────────────────────────────────────────────────────────
+// Baut die <option>-Liste von #dm-gewerk neu auf und wählt selectedValue (leer erlaubt).
+function populateGewerkOptions(selectedValue) {
+  const sel = document.getElementById('dm-gewerk');
+  sel.innerHTML = '<option value="">– kein Gewerk (nicht KNX-gesteuert) –</option>' +
+    Object.keys(GA_SCHEME).map(g => `<option value="${g}">${GEWERK_LABELS[g]}</option>`).join('');
+  sel.value = selectedValue || '';
+}
+
+// Baut die <option>-Liste von #dm-function passend zum gewählten Gewerk neu auf. Eine
+// gespeicherte Funktion, die nicht (mehr) im Katalog des Gewerks steht (z.B. Altdaten
+// nach einer Katalog-Änderung), wird nicht stillschweigend verworfen, sondern als
+// zusätzliche Option angehängt.
+function populateFunctionOptions(gewerk, selectedValue) {
+  const sel = document.getElementById('dm-function');
+  const functions = gewerk ? (FUNCTION_CATALOG[gewerk] || []) : [];
+  sel.innerHTML = '<option value="">– keine –</option>' +
+    functions.map(f => `<option value="${f}">${FUNCTION_LABELS[f] || f}</option>`).join('');
+  if (selectedValue && !functions.includes(selectedValue)) {
+    sel.insertAdjacentHTML('beforeend', `<option value="${selectedValue}">${FUNCTION_LABELS[selectedValue] || selectedValue} (nicht im Katalog)</option>`);
+  }
+  sel.value = selectedValue || '';
+}
+
+function onDeviceGewerkChange() {
+  populateFunctionOptions(document.getElementById('dm-gewerk').value, '');
+}
+
+// Schlägt beim Wechsel des Jetplan-Typs ein passendes Gewerk vor (z.B. Beleuchtung).
+// Setzt #dm-type.value nicht selbst zurück, überschreibt also keine bereits vom Nutzer
+// getroffene Auswahl in derselben Modal-Sitzung außer durch deren eigenes onchange.
+function onDeviceTypeChange() {
+  const type = document.getElementById('dm-type').value;
+  const name = document.getElementById('dm-name').value.trim();
+  const suggested = defaultGewerkFor(type, name);
+  populateGewerkOptions(suggested);
+  populateFunctionOptions(suggested, '');
+}
+
 function openDeviceModal(id) {
   editingDeviceId = id;
   const delBtn = document.getElementById('dm-delete-btn');
@@ -1452,7 +1690,8 @@ function openDeviceModal(id) {
     document.getElementById('dm-room').value     = item.room || '';
     document.getElementById('dm-fuse').value     = item.fuse || '';
     document.getElementById('dm-groups').value   = (item.groupIds || []).join(', ');
-    document.getElementById('dm-function').value = item.knxFunction || effectiveFunction(item) || '';
+    populateGewerkOptions(item.knxGewerk || effectiveGewerk(item) || '');
+    populateFunctionOptions(document.getElementById('dm-gewerk').value, item.knxFunction || effectiveFunction(item) || '');
   } else {
     document.getElementById('device-modal-title').textContent = 'Gerät hinzufügen';
     delBtn.style.display = 'none';
@@ -1462,7 +1701,9 @@ function openDeviceModal(id) {
     document.getElementById('dm-room').value     = '';
     document.getElementById('dm-fuse').value     = '';
     document.getElementById('dm-groups').value   = '';
-    document.getElementById('dm-function').value = '';
+    const suggested = defaultGewerkFor('lighting', '');
+    populateGewerkOptions(suggested);
+    populateFunctionOptions(suggested, '');
   }
   document.getElementById('device-modal').style.display = 'flex';
 }
@@ -1479,6 +1720,7 @@ function saveDeviceFromModal() {
   const room       = document.getElementById('dm-room').value.trim();
   const fuse       = document.getElementById('dm-fuse').value.trim();
   const groupIds   = document.getElementById('dm-groups').value.split(',').map(s => s.trim()).filter(Boolean);
+  const knxGewerk   = document.getElementById('dm-gewerk').value || null;
   const knxFunction = document.getElementById('dm-function').value || null;
 
   if (!name) { alert('Bitte einen Namen/Bezeichnung angeben.'); return; }
@@ -1491,6 +1733,7 @@ function saveDeviceFromModal() {
     item.room  = room;
     if (fuse) item.fuse = fuse; else delete item.fuse;
     if (groupIds.length) item.groupIds = groupIds; else delete item.groupIds;
+    if (knxGewerk) item.knxGewerk = knxGewerk; else delete item.knxGewerk;
     if (knxFunction) item.knxFunction = knxFunction; else delete item.knxFunction;
   } else {
     const newItem = {
@@ -1502,6 +1745,7 @@ function saveDeviceFromModal() {
     };
     if (fuse) newItem.fuse = fuse;
     if (groupIds.length) newItem.groupIds = groupIds;
+    if (knxGewerk) newItem.knxGewerk = knxGewerk;
     if (knxFunction) newItem.knxFunction = knxFunction;
     PROJECT.items.push(newItem);
   }
@@ -1522,12 +1766,16 @@ function deleteDeviceFromModal() {
   persistProject();
 }
 
-function onDeviceTypeChange() { /* derzeit ohne abhängige Felder, Auswahl bleibt frei kombinierbar */ }
-
 // ── Recommendations ────────────────────────────────────────────────────────
 function renderRecommendations() {
   const d = PROJECT;
   const recs = [];
+
+  // 0. KNX-Adress-Warnungen (Schema-Lücken, 255er-Grenze, Geschoss-Puffer-Überlauf,
+  //    Gruppen ohne erkennbares Gewerk) — siehe assignObjectIndexes()/rebuild().
+  (d.knxWarnings || []).forEach(text => {
+    recs.push({ level: 'high', title: 'KNX-Adressierung', text });
+  });
 
   // 1. Ungrouped lighting
   if (d.ungroupedLighting.length > 0) {
@@ -1787,7 +2035,7 @@ function exportDeviceList() {
   csv += 'Typ,Funktion,Name,Etage,Raum,Sicherung,Gruppen\n';
   PROJECT.items.forEach(i => {
     const f = effectiveFunction(i);
-    csv += `"${i.element?.type || ''}","${f ? FUNCTION_TYPES[f].label : ''}","${i.element?.name || ''}","${i.level}","${i.room || ''}","${i.fuse || ''}","${(i.groupIds || []).join('; ')}"\n`;
+    csv += `"${i.element?.type || ''}","${f ? (FUNCTION_LABELS[f] || '') : ''}","${i.element?.name || ''}","${i.level}","${i.room || ''}","${i.fuse || ''}","${(i.groupIds || []).join('; ')}"\n`;
   });
   download('knx-geraete.csv', csv, 'text/csv;charset=utf-8');
 }
@@ -1804,24 +2052,33 @@ function exportProjectState() {
   download(`knx-projektstand-${PROJECT.project?.name || 'projekt'}.json`, JSON.stringify(payload, null, 2), 'application/json;charset=utf-8');
 }
 
+// Gruppiert nach Gewerk (= Hauptgruppe) statt wie früher nach Geschoss — Hauptgruppe
+// bedeutet jetzt Gewerk, das ist die naheliegende oberste Ebene für den 3-Ebenen-Baum
+// in ETS. Namensschema je Adresse: "Geschoss – Räume – Objekt – Funktion-Teilfunktion".
+// "Objekt" ist mangels sprechendem Namen im Jetplan-Datenmodell der erste Gerätename
+// in der Gruppe, sonst die Gruppen-ID — gegen Pauls Beispiel-Export noch zu verifizieren.
 function exportETS() {
   const d   = PROJECT;
   const now = new Date().toISOString().split('T')[0];
   let xml = `<?xml version="1.0" encoding="utf-8"?>
 <!-- KNX Gruppenadressenexport – erstellt mit Jetplan KNX Konverter -->
 <!-- Kompatibel mit ETS 5 / ETS 6 (Import über: ETS → Gruppenadressen → Importieren) -->
-<KNX xmlns="http://knx.org/xml/ga-export/01" CreatedBy="Jetplan-KNX-Konverter" ToolVersion="1.0">
+<KNX xmlns="http://knx.org/xml/ga-export/01" CreatedBy="Jetplan-KNX-Konverter" ToolVersion="2.0">
   <Project Name="${escXml(d.project.name)}" LastModified="${now}" ProjectNumber="1">
     <GroupAddresses>\n`;
 
-  const floors = [...new Set(d.groups.map(g => g.floor))];
-  floors.forEach((floor, fi) => {
-    const floorGroups = d.groups.filter(g => g.floor === floor);
-    xml += `      <GroupRange Name="${escXml(floor)}" Address="${fi + 1}">\n`;
-    floorGroups.forEach(g => {
+  const exportable = d.groups.filter(g => g.gewerk && g.knxAddresses.length);
+  const byGewerk = {};
+  exportable.forEach(g => (byGewerk[g.gewerk] ??= []).push(g));
+
+  Object.entries(byGewerk).forEach(([gewerk, groups]) => {
+    xml += `      <GroupRange Name="${escXml(GEWERK_LABELS[gewerk] || gewerk)}" Address="${GA_SCHEME[gewerk].hauptgruppe}">\n`;
+    groups.forEach(g => {
+      const objectName = g.items[0]?.element?.name || g.id;
       g.knxAddresses.forEach(a => {
-        const desc = `${g.id} – ${a.label}: ${g.rooms.slice(0, 3).join(', ')}`;
-        xml += `        <GroupAddress Name="${escXml(g.id + ' ' + a.label)}" Address="${escXml(a.address)}" Description="${escXml(desc)}" DPTs="DPT-${escXml(a.dpt)}" />\n`;
+        const name = `${g.floor} – ${g.rooms.join('/') || '–'} – ${objectName} – ${g.functionLabel}-${a.label}`;
+        const desc = `${g.id} · ${a.label}`;
+        xml += `        <GroupAddress Name="${escXml(name)}" Address="${escXml(a.address)}" Description="${escXml(desc)}" DPTs="DPT-${escXml(a.dpt)}" />\n`;
       });
     });
     xml += `      </GroupRange>\n`;
@@ -1841,12 +2098,12 @@ function exportReport() {
 
   const groupRows = d.groups.map(g => `
     <tr>
-      <td>${g.knxAddresses.map(a => `${a.address} (${a.label})`).join('<br>')}</td>
+      <td>${g.knxAddresses.map(a => `${a.address} (${a.label})`).join('<br>') || '–'}</td>
       <td>${g.id}</td>
       <td>${g.floor}</td>
       <td>${g.rooms.join(', ') || '–'}</td>
       <td>${g.types.map(t => ELEMENT_LABELS[t] || t).join(', ')}</td>
-      <td>${FUNCTION_TYPES[g.function].label}</td>
+      <td>${g.functionLabel || '–'}</td>
       <td>${g.items.length}</td>
     </tr>`).join('');
 

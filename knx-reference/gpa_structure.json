@@ -1,0 +1,246 @@
+{
+  "project": "",
+  "addressScheme": {
+    "type": "three_level",
+    "description": "three_level = main/middle/line e.g. 1/2/3",
+    "startMain": 1,
+    "startMiddle": 0,
+    "startLine": 0,
+    "step": 1
+  },
+  "mainGroups": [
+    {
+      "number": 0,
+      "name": "Zentralfunktionen",
+      "middleGroups": [
+        {
+          "number": 0,
+          "name": "Allgemein"
+        }
+      ]
+    },
+    {
+      "number": 1,
+      "name": "Beleuchtung",
+      "middleGroups": [
+        {
+          "number": 0,
+          "name": "Zentralfunktionen"
+        },
+        {
+          "number": 1,
+          "name": "Schalten"
+        },
+        {
+          "number": 2,
+          "name": "Dimmen-relativ"
+        },
+        {
+          "number": 3,
+          "name": "Dimmen-absolut"
+        },
+        {
+          "number": 4,
+          "name": "Status-Schalten"
+        },
+        {
+          "number": 5,
+          "name": "Status-Wert"
+        },
+        {
+          "number": 6,
+          "name": "Extra"
+        },
+        {
+          "number": 7,
+          "name": "Sperre"
+        }
+      ]
+    },
+    {
+      "number": 2,
+      "name": "Verbraucher",
+      "middleGroups": [
+        {
+          "number": 0,
+          "name": "Zentralfunktionen"
+        },
+        {
+          "number": 1,
+          "name": "Schalten"
+        },
+        {
+          "number": 2,
+          "name": "Status-Schalten"
+        },
+        {
+          "number": 3,
+          "name": "Leistung"
+        },
+        {
+          "number": 4,
+          "name": "Strom"
+        },
+        {
+          "number": 5,
+          "name": "Spannung"
+        },
+        {
+          "number": 6,
+          "name": "Arbeit"
+        },
+        {
+          "number": 7,
+          "name": "Sperre"
+        }
+      ]
+    },
+    {
+      "number": 3,
+      "name": "Beschattung",
+      "middleGroups": [
+        {
+          "number": 0,
+          "name": "Zentralfunktionen"
+        },
+        {
+          "number": 1,
+          "name": "Auf-Ab"
+        },
+        {
+          "number": 2,
+          "name": "Stopp"
+        },
+        {
+          "number": 3,
+          "name": "Position-Absolut"
+        },
+        {
+          "number": 4,
+          "name": "Lamellen-Absolut"
+        },
+        {
+          "number": 5,
+          "name": "Status-Position"
+        },
+        {
+          "number": 6,
+          "name": "Status-Lamellen"
+        },
+        {
+          "number": 7,
+          "name": "Sperre"
+        }
+      ]
+    },
+    {
+      "number": 4,
+      "name": "Heizung",
+      "middleGroups": [
+        {
+          "number": 0,
+          "name": "Zentralfunktionen"
+        },
+        {
+          "number": 1,
+          "name": "Isttemperatur"
+        },
+        {
+          "number": 2,
+          "name": "Solltemperatur"
+        },
+        {
+          "number": 3,
+          "name": "Solltemperatur-Status"
+        },
+        {
+          "number": 4,
+          "name": "Sollwertverschiebung"
+        },
+        {
+          "number": 5,
+          "name": "Sollwertverschiebung-Status"
+        },
+        {
+          "number": 6,
+          "name": "Stellwert-Status"
+        }
+      ]
+    },
+    {
+      "number": 5,
+      "name": "Kontakte",
+      "middleGroups": [
+        {
+          "number": 0,
+          "name": "Zentralfunktionen"
+        },
+        {
+          "number": 1,
+          "name": "Verriegelung"
+        },
+        {
+          "number": 2,
+          "name": "Kipp"
+        },
+        {
+          "number": 3,
+          "name": "Verschluss"
+        },
+        {
+          "number": 4,
+          "name": "Alarm"
+        },
+        {
+          "number": 5,
+          "name": "Präsenz"
+        }
+      ]
+    },
+    {
+      "number": 10,
+      "name": "Umweltsensor",
+      "middleGroups": [
+        {
+          "number": 0,
+          "name": "Zentralfunktionen"
+        },
+        {
+          "number": 1,
+          "name": "Temperatur"
+        },
+        {
+          "number": 2,
+          "name": "Luftfeuchtigkeit"
+        },
+        {
+          "number": 3,
+          "name": "CO2"
+        },
+        {
+          "number": 4,
+          "name": "VOC"
+        },
+        {
+          "number": 5,
+          "name": "Helligkeit"
+        },
+        {
+          "number": 6,
+          "name": "Wind"
+        },
+        {
+          "number": 7,
+          "name": "Regen"
+        }
+      ]
+    }
+  ],
+  "functionMap": {},
+  "defaults": {
+    "startAddressNumber": 1,
+    "addressingMode": "auto",
+    "maxPerMain": 255
+  },
+  "examples": []
+}

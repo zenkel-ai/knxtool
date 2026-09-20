@@ -1,0 +1,52 @@
+[
+  {
+    "id": "beleuchtung",
+    "name": "Beleuchtung",
+    "functions": [
+      { "id": "schalten", "name": "Schalten" },
+      { "id": "dimmen", "name": "Dimmen" },
+      { "id": "rgbw", "name": "RGBW" }
+    ]
+  },
+  {
+    "id": "verbraucher",
+    "name": "Verbraucher",
+    "functions": [
+      { "id": "schalten", "name": "Schalten" },
+      { "id": "messen", "name": "Messen" }
+    ]
+  },
+  {
+    "id": "beschattung",
+    "name": "Beschattung",
+    "functions": [
+      { "id": "rolladen", "name": "Rolladen" },
+      { "id": "jalousie", "name": "Jalousie" }
+    ]
+  },
+  {
+    "id": "heizung",
+    "name": "Heizung",
+    "functions": [
+      { "id": "heizen", "name": "Heizen" },
+      { "id": "kuehlen", "name": "Kühlen" }
+    ]
+  },
+  {
+    "id": "kontakte",
+    "name": "Kontakte",
+    "functions": [
+      { "id": "fenster_tuer", "name": "Fenster-Tür" },
+      { "id": "alarm", "name": "Alarm" },
+      { "id": "praesenz", "name": "Präsenz" }
+    ]
+  },
+  {
+    "id": "umwelt",
+    "name": "Umwelt",
+    "functions": [
+      { "id": "luft", "name": "Luft" },
+      { "id": "helligkeit", "name": "Helligkeit" }
+    ]
+  }
+]

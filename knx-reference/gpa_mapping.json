@@ -1,0 +1,110 @@
+{
+  "mappings": [
+    {
+      "gewerk": "beleuchtung",
+      "func": "schalten",
+      "gpas": [
+        { "main": 1, "middle": 1 },
+        { "main": 1, "middle": 4 },
+        { "main": 1, "middle": 7 }
+      ]
+    },
+    {
+      "gewerk": "beleuchtung",
+      "func": "dimmen",
+      "gpas": [
+        { "main": 1, "middle": 1 },
+        { "main": 1, "middle": 2 },
+        { "main": 1, "middle": 3 },
+        { "main": 1, "middle": 4 },
+        { "main": 1, "middle": 5 },
+        { "main": 1, "middle": 7 }
+      ]
+    },
+    {
+      "gewerk": "verbraucher",
+      "func": "schalten",
+      "gpas": [
+        { "main": 2, "middle": 1 },
+        { "main": 2, "middle": 2 },
+        { "main": 2, "middle": 7 }
+      ]
+    },
+    {
+      "gewerk": "verbraucher",
+      "func": "messen",
+      "gpas": [
+        { "main": 2, "middle": 1 },
+        { "main": 2, "middle": 2 },
+        { "main": 2, "middle": 3 },
+        { "main": 2, "middle": 4 },
+        { "main": 2, "middle": 5 },
+        { "main": 2, "middle": 6 },
+        { "main": 2, "middle": 7 }
+      ]
+    },
+    {
+      "gewerk": "beschattung",
+      "func": "*",
+      "gpas": [
+        { "main": 3, "middle": 1 },
+        { "main": 3, "middle": 2 },
+        { "main": 3, "middle": 3 },
+        { "main": 3, "middle": 4 },
+        { "main": 3, "middle": 5 },
+        { "main": 3, "middle": 6 },
+        { "main": 3, "middle": 7 }
+      ]
+    },
+    {
+      "gewerk": "heizung",
+      "func": "*",
+      "gpas": [
+        { "main": 4, "middle": 1 },
+        { "main": 4, "middle": 2 },
+        { "main": 4, "middle": 3 },
+        { "main": 4, "middle": 4 },
+        { "main": 4, "middle": 5 },
+        { "main": 4, "middle": 6 }
+      ]
+    },
+    {
+      "gewerk": "kontakte",
+      "func": "fenster_tuer",
+      "gpas": [
+        { "main": 5, "middle": 1 },
+        { "main": 5, "middle": 2 },
+        { "main": 5, "middle": 3 }
+      ]
+    },
+    {
+      "gewerk": "kontakte",
+      "func": "alarm",
+      "gpas": [
+        { "main": 5, "middle": 4 }
+      ]
+    },
+    {
+      "gewerk": "kontakte",
+      "func": "praesenz",
+      "gpas": [
+        { "main": 5, "middle": 5 }
+      ]
+    },
+    {
+      "gewerk": "umwelt",
+      "func": "luft",
+      "gpas": [
+        { "main": 10, "middle": 1 },
+        { "main": 10, "middle": 2 }
+      ]
+    },
+    {
+      "gewerk": "umwelt",
+      "func": "helligkeit",
+      "gpas": [
+        { "main": 10, "middle": 5 }
+      ]
+    }
+  ]
+}
