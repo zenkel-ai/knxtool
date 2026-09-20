@@ -1,0 +1,8 @@
+# Minimal gehalten - dieses Projekt nutzt nur gehostetes Supabase (keinen lokalen
+# Dev-Stack), daher kein vollständiges `supabase init`-Scaffold mit db/studio/etc.
+project_id = "qmbmskthgxdmybvqyoax"
+
+[functions.ask-ai]
+# Nur eingeloggte Nutzer:innen (gültiges Supabase-JWT) dürfen die Funktion aufrufen -
+# das ist die eigentliche Zugriffsschranke, siehe supabase/functions/ask-ai/index.ts.
+verify_jwt = true

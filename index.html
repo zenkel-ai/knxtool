@@ -370,24 +370,6 @@
   }
   .unassigned-functions ul { margin: 6px 0 0 1.1rem; color: var(--text-secondary); }
 
-  /* API key input */
-  .apikey-row {
-    display: flex; gap: 8px; align-items: center;
-    margin-bottom: 12px;
-  }
-  .apikey-row input {
-    flex: 1;
-    padding: 7px 10px;
-    border: 0.5px solid var(--border-md);
-    border-radius: var(--radius-md);
-    font-size: 13px;
-    background: var(--bg);
-    color: var(--text);
-    font-family: monospace;
-  }
-  .apikey-row input:focus { outline: none; border-color: var(--text-secondary); }
-  .apikey-note { font-size: 11px; color: var(--text-tertiary); margin-bottom: 10px; }
-
   code {
     font-family: 'SF Mono', 'Fira Code', monospace;
     font-size: 11px;
@@ -637,12 +619,7 @@
               <button class="btn btn-sm" onclick="runAIAnalysis()">&#9654; Analyse starten</button>
             </div>
           </div>
-          <div class="apikey-row">
-            <input type="password" id="api-key-input" placeholder="sk-ant-api03-… (Anthropic API Key)">
-            <button class="btn btn-sm" onclick="toggleKeyVis()">Anzeigen</button>
-          </div>
-          <p class="apikey-note">Der API-Key wird nur lokal in dieser Sitzung verwendet und nicht gespeichert. Erhältlich unter console.anthropic.com</p>
-          <div id="ai-output" class="placeholder">Trage deinen Anthropic API-Key ein und klicke auf "Analyse starten"...</div>
+          <div id="ai-output" class="placeholder">Klicke auf "Analyse starten", um eine KI-gestützte KNX-Einschätzung zu diesem Projekt zu erhalten...</div>
         </div>
 
         <div class="section-title">Automatische Empfehlungen</div>
@@ -2194,19 +2171,11 @@ function renderRecommendations() {
 }
 
 // ── AI Analysis ────────────────────────────────────────────────────────────
-function toggleKeyVis() {
-  const inp = document.getElementById('api-key-input');
-  inp.type  = inp.type === 'password' ? 'text' : 'password';
-}
-
+// Ruft die Supabase Edge Function "ask-ai" auf statt api.anthropic.com direkt - der
+// Anthropic-Key liegt nur noch serverseitig (siehe supabase/functions/ask-ai/index.ts).
+// supabaseClient.functions.invoke() hängt automatisch das JWT der laufenden Sitzung an.
 async function runAIAnalysis() {
   if (!PROJECT) return;
-
-  const apiKey = document.getElementById('api-key-input').value.trim();
-  if (!apiKey) {
-    alert('Bitte zuerst den Anthropic API-Key eingeben.');
-    return;
-  }
 
   const dot    = document.getElementById('ai-dot');
   const output = document.getElementById('ai-output');
@@ -2229,67 +2198,18 @@ async function runAIAnalysis() {
     }))
   };
 
-  const prompt = `Du bist ein erfahrener KNX-Elektroingenieur und Planungsspezialist. Analysiere diesen Jetplan-Stromlaufplan und gib konkrete KNX-Empfehlungen auf Deutsch.
-
-Projektdaten (aus Jetplan-Export):
-${JSON.stringify(summary, null, 2)}
-
-Erstelle eine strukturierte technische Analyse mit folgenden Abschnitten:
-
-## 1. Bewertung der KNX-Eignung
-Kurze Einschätzung des Plans (2–3 Sätze).
-
-## 2. Empfohlene KNX-Komponenten
-Top 5 konkrete Komponenten mit:
-- Funktion im Projekt
-- Produktbeispiel (Hersteller, Bestellnummer)
-- Warum hier notwendig
-
-## 3. Empfohlene Gruppenadressenstruktur
-Schlage eine sinnvolle Struktur vor:
-- Hauptgruppe X/–/– : [Funktion]
-  - Mittelgruppe X/Y/– : [Etage/Bereich]
-    - X/Y/Z : Konkrete Gruppe
-
-## 4. Fehlende oder ergänzende Komponenten
-Was fehlt noch für ein vollständiges KNX-System?
-
-## 5. Energiemanagement-Potential
-Welche Einsparungen sind realistisch? Welche KNX-Funktionen helfen?
-
-Antworte technisch präzise, max. 500 Wörter. Verwende Fachbegriffe korrekt.`;
-
   try {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type':      'application/json',
-        'x-api-key':         apiKey,
-        'anthropic-version': '2023-06-01'
-      },
-      body: JSON.stringify({
-        model:      'claude-sonnet-4-20250514',
-        max_tokens: 1200,
-        messages:   [{ role: 'user', content: prompt }]
-      })
-    });
-
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.error?.message || `HTTP ${res.status}`);
-    }
-
-    const data = await res.json();
-    const text = data.content?.find(b => b.type === 'text')?.text || 'Keine Antwort erhalten.';
+    const { data, error } = await supabaseClient.functions.invoke('ask-ai', { body: { summary } });
+    if (error) throw new Error(error.message || 'Server-Fehler bei der Analyse.');
+    if (data?.error) throw new Error(data.error);
     output.className   = '';
-    output.textContent = text;
-    dot.className      = 'ai-dot';
+    output.textContent = data?.text || 'Keine Antwort erhalten.';
+    dot.className       = 'ai-dot';
     dot.style.background = '#1D9E75';
-
   } catch (err) {
     output.className   = '';
-    output.textContent = `Fehler: ${err.message}\n\nBitte API-Key prüfen und erneut versuchen.`;
-    dot.className      = 'ai-dot error';
+    output.textContent = `Fehler: ${err.message}\n\nBitte später erneut versuchen.`;
+    dot.className       = 'ai-dot error';
   }
 }
 
