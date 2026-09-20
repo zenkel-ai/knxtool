@@ -19,7 +19,7 @@
 // die JWT-Prüfung ist die eigentliche Grenze, ein curl-Aufruf ohne gültiges Token schlägt
 // unabhängig von CORS fehl.
 
-import Anthropic from "npm:@anthropic-ai/sdk@^0.71";
+import Anthropic from "npm:@anthropic-ai/sdk@^0.127";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -89,7 +89,10 @@ Deno.serve(async (req: Request) => {
   try {
     const response = await client.messages.create({
       model: "claude-opus-5",
-      max_tokens: 4096,
+      // Claude Opus 5 denkt standardmäßig (adaptive thinking) - die Denk-Token zählen
+      // mit ins selbe max_tokens-Budget wie die sichtbare Antwort, deshalb Puffer über
+      // den ca. 500 Wörtern (~700-1000 Tokens), die der Prompt anfordert.
+      max_tokens: 8192,
       messages: [{ role: "user", content: buildPrompt(summary) }],
     });
     const textBlock = response.content.find(
@@ -98,9 +101,10 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ text: textBlock?.text ?? "Keine Antwort erhalten." });
   } catch (error) {
     if (error instanceof Anthropic.APIError) {
+      console.error("ask-ai: Anthropic-API-Fehler", error.status, error.message);
       return jsonResponse({ error: error.message }, error.status ?? 500);
     }
     console.error("ask-ai: unerwarteter Fehler", error);
-    return jsonResponse({ error: "Unbekannter Fehler bei der Analyse." }, 500);
+    return jsonResponse({ error: error instanceof Error ? error.message : "Unbekannter Fehler bei der Analyse." }, 500);
   }
 });

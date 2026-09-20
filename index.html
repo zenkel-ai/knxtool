@@ -2200,7 +2200,13 @@ async function runAIAnalysis() {
 
   try {
     const { data, error } = await supabaseClient.functions.invoke('ask-ai', { body: { summary } });
-    if (error) throw new Error(error.message || 'Server-Fehler bei der Analyse.');
+    if (error) {
+      // supabase-js verpackt einen Nicht-2xx-Response der Function in eine generische
+      // Meldung ("Edge Function returned a non-2xx status code") - die eigentliche
+      // Fehlermeldung unserer Function steckt im rohen Response-Body unter error.context.
+      const detail = await error.context?.json?.().catch(() => null);
+      throw new Error(detail?.error || error.message || 'Server-Fehler bei der Analyse.');
+    }
     if (data?.error) throw new Error(data.error);
     output.className   = '';
     output.textContent = data?.text || 'Keine Antwort erhalten.';
