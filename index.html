@@ -324,6 +324,52 @@
   .export-card h3 { font-size: 14px; font-weight: 500; }
   .export-card p  { font-size: 12px; color: var(--text-secondary); line-height: 1.5; flex: 1; }
 
+  /* Schalterbelegung */
+  .switch-plate {
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 1rem 1.25rem;
+    margin-bottom: 1rem;
+  }
+  .switch-plate-header {
+    display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+    margin-bottom: 12px;
+  }
+  .switch-plate-header input[type="text"] {
+    padding: 6px 8px; border: 0.5px solid var(--border-md); border-radius: var(--radius-md);
+    font-size: 13px; background: var(--bg); color: var(--text);
+  }
+  .switch-plate-header input[name="sw-name"] { font-weight: 500; width: 160px; }
+  .switch-plate-header input[name="sw-floor"],
+  .switch-plate-header input[name="sw-room"]  { width: 110px; }
+  .switch-plate-header input[name="sw-count"] { width: 50px; }
+  .switch-buttons {
+    display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px;
+    max-width: 420px;
+  }
+  .switch-button {
+    border: 1px solid var(--border-md);
+    border-radius: 8px;
+    background: var(--bg-secondary);
+    padding: 8px;
+    min-height: 56px;
+    display: flex; flex-direction: column; justify-content: center; gap: 4px;
+  }
+  .switch-button .btn-slot-label { font-size: 9px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-tertiary); }
+  .switch-button select {
+    width: 100%; font-size: 12px; padding: 3px 4px;
+    border: 0.5px solid var(--border-md); border-radius: 6px;
+    background: var(--bg); color: var(--text);
+  }
+  .unassigned-functions {
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 12px 14px;
+    margin-bottom: 1.25rem;
+    font-size: 12px;
+  }
+  .unassigned-functions ul { margin: 6px 0 0 1.1rem; color: var(--text-secondary); }
+
   /* API key input */
   .apikey-row {
     display: flex; gap: 8px; align-items: center;
@@ -513,6 +559,7 @@
       <div class="tab" data-tab="groups">Schaltgruppen</div>
       <div class="tab" data-tab="devices">Geräteliste</div>
       <div class="tab" data-tab="recommendations">KNX-Empfehlungen</div>
+      <div class="tab" data-tab="switches">Schalterbelegung</div>
       <div class="tab" data-tab="export">Export</div>
     </div>
 
@@ -600,6 +647,18 @@
 
         <div class="section-title">Automatische Empfehlungen</div>
         <div id="static-recommendations"></div>
+      </div>
+
+      <!-- Switches Tab -->
+      <div class="panel" id="tab-switches">
+        <p style="font-size:13px;color:var(--text-secondary);margin-bottom:1rem;">
+          Ordne KNX-Funktionen konkreten Tastern/Schaltern zu — als Planungs- und
+          Freigabe-Grundlage für den Kunden, bevor programmiert wird. Nur einfache
+          Tasten-Funktionen (ein Taster löst eine Funktion aus), keine Szenensteuerung.
+        </p>
+        <div class="unassigned-functions" id="unassigned-functions"></div>
+        <button class="btn btn-sm btn-primary" onclick="newSwitch()" style="margin-bottom:1rem;">+ Neuer Taster</button>
+        <div id="switches-list"></div>
       </div>
 
       <!-- Export Tab -->
@@ -1034,6 +1093,7 @@ function processData(json) {
   PROJECT = {
     project, unit,
     items: json.data.outletItems || [],
+    switches: json.data.switches || [],
     meta:  json.meta
   };
 
@@ -1270,7 +1330,7 @@ async function runPersist() {
   setSyncStatus('saving');
   const payload = {
     meta: PROJECT.meta,
-    data: { projects: [PROJECT.project], units: [PROJECT.unit], outletItems: PROJECT.items }
+    data: { projects: [PROJECT.project], units: [PROJECT.unit], outletItems: PROJECT.items, switches: PROJECT.switches || [] }
   };
   const { error } = await supabaseClient
     .from('projects')
@@ -1307,6 +1367,110 @@ function renderAll() {
   renderRecommendations();
   renderRoomTree();
   renderBOM();
+  renderSwitches();
+}
+
+// ── Schalterbelegung ──────────────────────────────────────────────────────
+// Aus dem Review-Call, als "laut gedacht" markiert und ausdrücklich auf einfache
+// Tasten-Funktionen beschränkt (keine Szenensteuerung): pro Taster eine feste Tastenzahl,
+// pro Taste genau eine zugeordnete Schaltgruppe. Rein werkzeug-eigenes Konzept, nicht aus
+// Jetplan abgeleitet (ein Taster ist eine Planungs-/Freigabe-Entscheidung, kein
+// Schaltplan-Objekt) - deshalb hier neu angelegt statt aus PROJECT.items geraten.
+// Persistiert als PROJECT.switches, Geschwister von PROJECT.items (siehe processData/
+// runPersist/exportProjectState).
+
+function assignableGroups() {
+  return (PROJECT?.groups || []).filter(g => g.gewerk);
+}
+
+function switchGroupLabel(g) {
+  const place = g.rooms[0] || g.floor || g.id;
+  return `${place} – ${g.gewerkLabel || ''} ${g.functionLabel || ''}`.replace(/\s+/g, ' ').trim();
+}
+
+function newSwitch() {
+  if (!PROJECT) return;
+  PROJECT.switches = PROJECT.switches || [];
+  PROJECT.switches.push({
+    id: 'switch-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7),
+    name: 'Neuer Taster',
+    floor: activeFloorDevice !== 'all' ? activeFloorDevice : '',
+    room: '',
+    buttonCount: 4,
+    assignments: {}
+  });
+  renderSwitches();
+  persistProject();
+}
+
+function deleteSwitch(id) {
+  if (!confirm('Diesen Taster wirklich löschen?')) return;
+  PROJECT.switches = (PROJECT.switches || []).filter(s => s.id !== id);
+  renderSwitches();
+  persistProject();
+}
+
+function updateSwitchField(id, field, value) {
+  const sw = (PROJECT.switches || []).find(s => s.id === id);
+  if (!sw) return;
+  if (field === 'buttonCount') {
+    const n = Math.max(1, Math.min(8, parseInt(value, 10) || 1));
+    sw.buttonCount = n;
+    Object.keys(sw.assignments).forEach(k => { if (Number(k) >= n) delete sw.assignments[k]; });
+  } else {
+    sw[field] = value;
+  }
+  renderSwitches();
+  persistProject();
+}
+
+function assignSwitchButton(switchId, buttonIndex, groupId) {
+  const sw = (PROJECT.switches || []).find(s => s.id === switchId);
+  if (!sw) return;
+  if (groupId) sw.assignments[buttonIndex] = groupId; else delete sw.assignments[buttonIndex];
+  renderSwitches();
+  persistProject();
+}
+
+function renderSwitches() {
+  const listEl = document.getElementById('switches-list');
+  const unassignedEl = document.getElementById('unassigned-functions');
+  if (!listEl || !unassignedEl || !PROJECT) return;
+
+  const groups = assignableGroups();
+  const switches = PROJECT.switches || [];
+  const assignedGroupIds = new Set();
+  switches.forEach(sw => Object.values(sw.assignments || {}).forEach(gid => assignedGroupIds.add(gid)));
+  const unassigned = groups.filter(g => !assignedGroupIds.has(g.id));
+
+  unassignedEl.innerHTML = unassigned.length
+    ? `Noch nicht auf einem Taster: <strong>${unassigned.length}</strong> Funktion(en)
+       <ul>${unassigned.map(g => `<li>${switchGroupLabel(g)}</li>`).join('')}</ul>`
+    : `Alle ${groups.length} KNX-Funktionen sind auf mindestens einem Taster platziert.`;
+
+  const optionsHtml = selectedId => `<option value="">– frei –</option>` +
+    groups.map(g => `<option value="${g.id}" ${g.id === selectedId ? 'selected' : ''}>${switchGroupLabel(g)}</option>`).join('');
+
+  listEl.innerHTML = switches.length ? switches.map(sw => `
+    <div class="switch-plate">
+      <div class="switch-plate-header">
+        <input type="text" name="sw-name" value="${sw.name}" onchange="updateSwitchField('${sw.id}','name',this.value)">
+        <input type="text" name="sw-floor" placeholder="Etage" value="${sw.floor || ''}" onchange="updateSwitchField('${sw.id}','floor',this.value)">
+        <input type="text" name="sw-room" placeholder="Raum" value="${sw.room || ''}" onchange="updateSwitchField('${sw.id}','room',this.value)">
+        <label style="font-size:11px;color:var(--text-secondary);">Tasten
+          <input type="number" name="sw-count" min="1" max="8" value="${sw.buttonCount}" onchange="updateSwitchField('${sw.id}','buttonCount',this.value)">
+        </label>
+        <button class="icon-btn" style="margin-left:auto;" onclick="deleteSwitch('${sw.id}')">Löschen</button>
+      </div>
+      <div class="switch-buttons">
+        ${Array.from({ length: sw.buttonCount }, (_, i) => `
+          <div class="switch-button">
+            <span class="btn-slot-label">Taste ${i + 1}</span>
+            <select onchange="assignSwitchButton('${sw.id}', ${i}, this.value)">${optionsHtml(sw.assignments[i])}</select>
+          </div>`).join('')}
+      </div>
+    </div>
+  `).join('') : `<div class="empty-state">Noch keine Taster angelegt.</div>`;
 }
 
 // ── Stückliste (BOM) ──────────────────────────────────────────────────────
@@ -2166,7 +2330,8 @@ function exportProjectState() {
     data: {
       projects: [PROJECT.project],
       units: [PROJECT.unit],
-      outletItems: PROJECT.items
+      outletItems: PROJECT.items,
+      switches: PROJECT.switches || []
     }
   };
   download(`knx-projektstand-${PROJECT.project?.name || 'projekt'}.json`, JSON.stringify(payload, null, 2), 'application/json;charset=utf-8');
