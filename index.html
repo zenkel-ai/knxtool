@@ -49,6 +49,12 @@
     .rec-high  { background: #501313 !important; color: #F7C1C1 !important; }
     .rec-medium{ background: #412402 !important; color: #FAC775 !important; }
     .rec-low   { background: #173404 !important; color: #C0DD97 !important; }
+    /* KI-Status-Punkt: Lichtmodus-Farben liefern zwar noch ausreichend Kontrast gegen den
+       dunklen ai-box-Hintergrund (gemessen 3,95-7,15:1), aber ohne eigene Abstimmung wie
+       bei den Badges - hier etwas heller/gesättigter für den Dark Mode. */
+    .ai-dot           { background: #2DBF8E !important; }
+    .ai-dot.thinking  { background: #F5B04A !important; }
+    .ai-dot.error     { background: #F26D6C !important; }
   }
 
   body {
