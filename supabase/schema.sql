@@ -317,6 +317,30 @@ create trigger trg_projects_log_credit_event after insert on public.projects
   for each row execute function public.log_project_credit_event();
 
 -- ═══════════════════════════════════════════════════════════════════════════
+-- Rate-Limit für ask-ai (Kosten-Kontrolle, aus dem Sicherheitsaudit vom 2026-09-21)
+-- ═══════════════════════════════════════════════════════════════════════════
+
+-- Jeder ask-ai-Aufruf kostet echtes Anthropic-API-Guthaben auf Stefans Konto, ohne
+-- Deckel könnte ein Bug im Client oder absichtlicher Missbrauch unkontrolliert Kosten
+-- verursachen (siehe Audit, A04). Append-only, gleiches Prinzip wie credit_events -
+-- bewusst KEIN Reset-Zähler mit Cronjob, stattdessen zählt die Edge Function einfach die
+-- Zeilen der letzten 24h (rollierendes Fenster) vor jedem Aufruf.
+create table public.ai_analysis_events (
+  id               bigint generated always as identity primary key,
+  organization_id  uuid not null references public.organizations(id) on delete cascade,
+  created_at       timestamptz not null default now()
+);
+create index ai_analysis_events_org_created_idx on public.ai_analysis_events (organization_id, created_at desc);
+alter table public.ai_analysis_events enable row level security;
+
+-- Nur select für authenticated (z.B. für eine künftige "12/20 heute genutzt"-Anzeige) -
+-- geschrieben wird ausschließlich von der Edge Function über den Service-Role-Client,
+-- genau wie bei credit_events.
+create policy ai_analysis_events_select_own_org
+  on public.ai_analysis_events for select to authenticated
+  using (organization_id = public.current_org_id());
+
+-- ═══════════════════════════════════════════════════════════════════════════
 -- Stripe-Anbindung — Phase 2 (Einmalkauf)
 -- ═══════════════════════════════════════════════════════════════════════════
 

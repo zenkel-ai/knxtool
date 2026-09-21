@@ -18,13 +18,23 @@
 // Origin: *), weil CORS nur eine Browser-Höflichkeit ist, keine echte Zugriffsschranke -
 // die JWT-Prüfung ist die eigentliche Grenze, ein curl-Aufruf ohne gültiges Token schlägt
 // unabhängig von CORS fehl.
+//
+// Rate-Limit (aus dem Sicherheitsaudit vom 2026-09-21, A04): jeder Aufruf kostet echtes
+// Anthropic-Guthaben auf Stefans Konto, ohne Deckel könnte ein Bug im Client oder
+// absichtlicher Missbrauch unkontrolliert Kosten verursachen. DAILY_LIMIT pro
+// Organisation (nicht pro Nutzer:in - mehrere Logins einer Firma teilen sich das
+// Kontingent, gleiches Prinzip wie die Projekt-Credits), rollierendes 24h-Fenster über
+// ai_analysis_events (schema.sql) statt eines Reset-Zählers - kein Cronjob nötig.
 
 import Anthropic from "npm:@anthropic-ai/sdk@^0.127";
+import { createClient } from "npm:@supabase/supabase-js@^2";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
+
+const DAILY_LIMIT = 20;
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -82,6 +92,50 @@ Deno.serve(async (req: Request) => {
   }
   if (!summary || typeof summary !== "object") {
     return jsonResponse({ error: "Feld 'summary' fehlt oder ist ungültig." }, 400);
+  }
+
+  // Aufrufer identifizieren (gleiches Muster wie create-checkout-session): eigener
+  // Client nur zum Auslesen von auth.uid(), alle privilegierten Zugriffe (Org-Zuordnung,
+  // Rate-Limit-Zähler) über den separaten Service-Role-Client.
+  const authHeader = req.headers.get("Authorization");
+  if (!authHeader) return jsonResponse({ error: "Nicht angemeldet." }, 401);
+  const callerClient = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_ANON_KEY")!, {
+    global: { headers: { Authorization: authHeader } },
+  });
+  const { data: userData, error: userError } = await callerClient.auth.getUser();
+  if (userError || !userData?.user) return jsonResponse({ error: "Nicht angemeldet." }, 401);
+
+  const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+
+  const { data: membership } = await admin
+    .from("organization_members").select("organization_id").eq("user_id", userData.user.id).maybeSingle();
+  if (!membership) return jsonResponse({ error: "Keinem Team zugeordnet." }, 400);
+
+  const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const { count, error: countError } = await admin
+    .from("ai_analysis_events")
+    .select("id", { count: "exact", head: true })
+    .eq("organization_id", membership.organization_id)
+    .gte("created_at", since);
+  if (countError) {
+    console.error("ask-ai: Rate-Limit-Zähler konnte nicht gelesen werden", countError);
+    return jsonResponse({ error: "Interner Fehler bei der Kontingentprüfung." }, 500);
+  }
+  if ((count ?? 0) >= DAILY_LIMIT) {
+    return jsonResponse({
+      error: `Tageslimit von ${DAILY_LIMIT} KI-Analysen pro Team erreicht. Bitte morgen erneut versuchen.`,
+    }, 429);
+  }
+
+  // Zähler-Eintrag VOR dem eigentlichen Anthropic-Aufruf schreiben, nicht erst danach -
+  // der Aufruf kostet Geld, sobald er raus geht, unabhängig davon ob die Antwort den
+  // Client noch erreicht. Kein Row-Lock hier (anders als der Projekt-Kontingent-Trigger):
+  // das ist eine weiche Kosten-Bremse, kein hartes Geschäftsregel-Limit - ein knapper
+  // Overshoot bei zwei zeitgleichen Requests ist ein akzeptabler Kompromiss.
+  const { error: logError } = await admin.from("ai_analysis_events").insert({ organization_id: membership.organization_id });
+  if (logError) {
+    console.error("ask-ai: Rate-Limit-Zähler konnte nicht geschrieben werden", logError);
+    return jsonResponse({ error: "Interner Fehler bei der Kontingentprüfung." }, 500);
   }
 
   const client = new Anthropic({ apiKey });
