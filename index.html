@@ -1042,6 +1042,17 @@ async function openBillingPortal() {
   if (data?.url) window.location.href = data.url;
 }
 
+// escapeHtml(): eingeladene E-Mail-Adressen kommen von einem anderen Org-Mitglied (Owner
+// tippt sie ein), nicht von einem selbst - ungeschützt in innerHTML eingesetzt wäre das
+// gespeichertes XSS (z.B. Einladung an "<img src=x onerror=...>@x.de"). textContent wäre
+// die einfachere Lösung gewesen, aber die Zeile mischt Text mit einem bedingten Button,
+// daher hier gezielt escapen statt der ganzen Zeile die Struktur zu nehmen.
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
 // Team-Verwaltung (Phase 4): organization_members hat keine E-Mail-Spalte (nur user_id),
 // und auth.users ist clientseitig nicht abfragbar - Mitgliederliste zeigt daher bewusst
 // nur Anzahl+Rolle, keine E-Mails. Offene Einladungen (organization_invites) haben die
@@ -1061,7 +1072,7 @@ async function loadTeamSection() {
 
   const inviteRows = (invites || []).map(inv => `
     <div style="display:flex;align-items:center;gap:10px;padding:6px 0;font-size:12px;">
-      <span style="flex:1;color:var(--text-secondary);">${inv.email} <span style="color:var(--text-tertiary);">· eingeladen am ${new Date(inv.created_at).toLocaleDateString('de-DE')}</span></span>
+      <span style="flex:1;color:var(--text-secondary);">${escapeHtml(inv.email)} <span style="color:var(--text-tertiary);">· eingeladen am ${new Date(inv.created_at).toLocaleDateString('de-DE')}</span></span>
       ${isOwner ? `<button class="icon-btn" onclick="cancelInvite('${inv.id}')">Zurückziehen</button>` : ''}
     </div>`).join('');
 

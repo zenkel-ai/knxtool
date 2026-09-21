@@ -1,0 +1,13 @@
+# Erzwingt HTTPS (vorher wurde http:// unverschlüsselt mit 200 ausgeliefert statt
+# umgeleitet - Session-Token/Formulardaten wären auf dem Transportweg abfangbar gewesen,
+# falls jemand ohne "https://" auf die Seite zugreift) und setzt HSTS, damit Browser sich
+# die HTTPS-Pflicht für diese Domain merken und künftig gar nicht erst http:// versuchen.
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteCond %{HTTPS} off
+  RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+</IfModule>
+
+<IfModule mod_headers.c>
+  Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains"
+</IfModule>
