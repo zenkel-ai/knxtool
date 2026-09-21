@@ -577,28 +577,42 @@
       </table>
     </div>
 
-    <div class="section-title">Neues Projekt aus Jetplan-Export anlegen</div>
-    <div class="upload-zone" id="drop-zone">
-      <svg class="upload-icon" width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M24 32V16M16 24l8-8 8 8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-        <path d="M10 34C7 32.6 4 29.4 4 25.5 4 20 8.5 16 14 16c.7 0 1.3.07 2 .2C17.8 12.3 21.6 10 26 10c6 0 11 5 11 11h.5C41.5 21 44 23.5 44 27s-2.5 7-7.5 7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-      </svg>
-      <h2>Jetplan JSON Datei laden</h2>
-      <p>Hierher ziehen oder klicken zum Auswählen</p>
-      <input type="file" id="file-input" accept=".json" style="display:none">
-      <p class="upload-hint">Unterstützt: Jetplan Stromlaufplan-Export (JSON)</p>
+    <div class="section-title">Neues Projekt anlegen</div>
+    <div class="export-grid" style="align-items:stretch;">
+      <div class="upload-zone" id="drop-zone">
+        <svg class="upload-icon" width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M24 32V16M16 24l8-8 8 8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M10 34C7 32.6 4 29.4 4 25.5 4 20 8.5 16 14 16c.7 0 1.3.07 2 .2C17.8 12.3 21.6 10 26 10c6 0 11 5 11 11h.5C41.5 21 44 23.5 44 27s-2.5 7-7.5 7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+        <h2>Jetplan JSON Datei laden</h2>
+        <p>Hierher ziehen oder klicken zum Auswählen</p>
+        <input type="file" id="file-input" accept=".json" style="display:none">
+        <p class="upload-hint">Unterstützt: Jetplan Stromlaufplan-Export (JSON)</p>
+      </div>
+      <div class="upload-zone" id="ets-drop-zone">
+        <svg class="upload-icon" width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M14 6h14l8 8v26a2 2 0 0 1-2 2H14a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+          <path d="M28 6v8h8" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+          <path d="M17 27l4 4 8-8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <h2>ETS-Gruppenadressen prüfen</h2>
+        <p>Hierher ziehen oder klicken zum Auswählen</p>
+        <input type="file" id="ets-file-input" accept=".csv,.xml,.txt" style="display:none">
+        <p class="upload-hint">Unterstützt: ETS-Gruppenadressen-Export (XML/CSV) — eigenständige Konventionsprüfung, kein Jetplan-Projekt nötig</p>
+      </div>
     </div>
   </div>
 
   <!-- Main App (hidden until file loaded) -->
   <div id="main-panel" style="display:none;">
     <div class="tabs" id="tabs">
-      <div class="tab active" data-tab="overview">Übersicht</div>
-      <div class="tab" data-tab="groups">Schaltgruppen</div>
-      <div class="tab" data-tab="devices">Geräteliste</div>
-      <div class="tab" data-tab="recommendations">KNX-Empfehlungen</div>
-      <div class="tab" data-tab="switches">Schalterbelegung</div>
-      <div class="tab" data-tab="export">Export</div>
+      <div class="tab active" data-tab="overview" data-source="jetplan">Übersicht</div>
+      <div class="tab" data-tab="groups" data-source="jetplan">Schaltgruppen</div>
+      <div class="tab" data-tab="devices" data-source="jetplan">Geräteliste</div>
+      <div class="tab" data-tab="recommendations" data-source="jetplan">KNX-Empfehlungen</div>
+      <div class="tab" data-tab="switches" data-source="jetplan">Schalterbelegung</div>
+      <div class="tab" data-tab="export" data-source="jetplan">Export</div>
+      <div class="tab" data-tab="ets-validation" data-source="ets" style="display:none;">Validierung</div>
     </div>
 
     <div class="content">
@@ -743,6 +757,14 @@
             <button class="btn" onclick="exportProjectState()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v11"/><path d="M7.5 10.5 12 15l4.5-4.5"/><path d="M5 19h14"/></svg> JSON herunterladen</button>
           </div>
         </div>
+      </div>
+
+      <!-- ETS Validation Tab -->
+      <div class="panel" id="tab-ets-validation">
+        <div class="section-title" style="margin-top:0;">Konventionsprüfung</div>
+        <div class="stats-grid" id="ets-stats-grid"></div>
+        <div class="section-title">Hinweise</div>
+        <div id="ets-validation-results"></div>
       </div>
 
     </div>
@@ -896,6 +918,7 @@ function showPanel(name) {
 const ONBOARDING_HINT_KEY = 'knx-onboarding-hint-dismissed';
 
 function maybeShowOnboardingHint() {
+  if (PROJECT?.sourceType === 'ets_ga_export') return; // Hinweis verweist auf die Geräteliste, die es hier nicht gibt
   if (document.getElementById('onboarding-hint')) return;
   try { if (localStorage.getItem(ONBOARDING_HINT_KEY)) return; } catch { return; }
   const banner = document.createElement('div');
@@ -919,12 +942,12 @@ async function loadProjectsList() {
   tbody.innerHTML = `<tr><td colspan="4" style="color:var(--text-tertiary);">Lädt…</td></tr>`;
   const { data, error } = await supabaseClient
     .from('projects')
-    .select('id,name,unit_code,updated_at')
+    .select('id,name,unit_code,updated_at,sourceType:data->meta->>sourceType')
     .order('updated_at', { ascending: false });
   if (error) { tbody.innerHTML = `<tr><td colspan="4">Fehler: ${escapeHtml(error.message)}</td></tr>`; return; }
   tbody.innerHTML = data.length ? data.map(p => `
     <tr>
-      <td>${escapeHtml(p.name || '–')}</td>
+      <td>${p.sourceType === 'ets_ga_export' ? '<span class="header-badge" style="margin-right:6px;">ETS</span>' : ''}${escapeHtml(p.name || '–')}</td>
       <td>${escapeHtml(p.unit_code || '–')}</td>
       <td>${new Date(p.updated_at).toLocaleString('de-DE')}</td>
       <td style="display:flex;gap:6px;">
@@ -981,6 +1004,173 @@ async function handleNewProjectFile(json) {
   currentProjectId = data.id;
   processData(payload);
   showPanel('app');
+}
+
+// ── ETS-Gruppenadressen-Import ───────────────────────────────────────────────
+// Zweiter Einstiegspunkt neben handleNewProjectFile() (Jetplan) - spiegelt dessen
+// Ablauf bewusst (gleiche QUOTA_EXCEEDED-Behandlung, gleiches Insert→processData()-
+// Muster), landet aber in derselben projects-Tabelle wie Jetplan-Projekte (siehe
+// processData()-Kommentar: data.meta.sourceType steuert die Pipeline, keine
+// Schema-Änderung nötig).
+async function handleNewEtsProjectFile(file) {
+  let parsed;
+  try {
+    parsed = await parseEtsGroupExport(file);
+  } catch (err) {
+    alert('ETS-Datei konnte nicht gelesen werden:\n' + err.message);
+    return;
+  }
+  if (!parsed.groups.length) {
+    alert('Keine Gruppenadressen in der Datei gefunden.');
+    return;
+  }
+  const projectName = file.name.replace(/\.[^.]+$/, '') || 'ETS-Projekt';
+  const payload = {
+    meta: {
+      sourceType: 'ets_ga_export', sourceFileName: file.name, sourceFormat: parsed.format,
+      importedAt: new Date().toISOString(), parseWarnings: parsed.parseWarnings,
+    },
+    data: { project: { name: projectName }, etsGroups: parsed.groups },
+  };
+  const { data, error } = await supabaseClient
+    .from('projects')
+    .insert({ name: projectName, unit_code: null, data: payload, created_by: currentUser.id })
+    .select('id').single();
+  if (error) {
+    if (error.message?.includes('QUOTA_EXCEEDED')) {
+      alert('Kein Projekt-Kontingent mehr verfügbar. Bitte oben in der Projektliste Kontingent nachkaufen.');
+    } else {
+      alert('Projekt konnte nicht angelegt werden: ' + error.message);
+    }
+    return;
+  }
+  currentProjectId = data.id;
+  processData(payload);
+  showPanel('app');
+}
+
+function readFileAsArrayBuffer(file) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload  = () => resolve(r.result);
+    r.onerror = () => reject(r.error);
+    r.readAsArrayBuffer(file);
+  });
+}
+
+// ETS-CSV-Exporte unter deutschem Windows sind oft UTF-16 mit BOM - readAsText() würde
+// das als Mojibake fehldekodieren. BOM-Bytes selbst prüfen statt zu raten; ohne
+// erkanntes BOM wird UTF-8 angenommen.
+function decodeTextSmart(buffer) {
+  const bytes = new Uint8Array(buffer);
+  if (bytes[0] === 0xFF && bytes[1] === 0xFE) return new TextDecoder('utf-16le').decode(buffer.slice(2));
+  if (bytes[0] === 0xFE && bytes[1] === 0xFF) return new TextDecoder('utf-16be').decode(buffer.slice(2));
+  if (bytes[0] === 0xEF && bytes[1] === 0xBB && bytes[2] === 0xBF) return new TextDecoder('utf-8').decode(buffer.slice(3));
+  return new TextDecoder('utf-8').decode(buffer);
+}
+
+async function parseEtsGroupExport(file) {
+  const buffer = await readFileAsArrayBuffer(file);
+  const text = decodeTextSmart(buffer);
+  const isXml = /\.xml$/i.test(file.name) || (!/\.csv$/i.test(file.name) && /^\s*<\?xml|^\s*<KNX/i.test(text));
+  return isXml ? parseEtsGroupAddressXml(text) : parseEtsGroupAddressCsv(text);
+}
+
+// Liest ETS' eigenes, dokumentiertes Gruppenadressen-Austauschformat
+// (xmlns="http://knx.org/xml/ga-export/01", <GroupAddress Address="1/2/3" Name="…"
+// DPTs="DPT-1.001"/> - siehe exportETS() weiter unten, das exakt dieses Format bereits
+// SCHREIBT). Namespace-tolerant über localName gelesen statt die URI hart zu
+// verdrahten, da ETS-Versionen variieren können.
+function parseEtsGroupAddressXml(text) {
+  const doc = new DOMParser().parseFromString(text, 'application/xml');
+  if (doc.querySelector('parsererror')) {
+    throw new Error('XML konnte nicht gelesen werden — Datei beschädigt oder kein gültiges XML.');
+  }
+  const nodes = [...doc.getElementsByTagName('*')].filter(el => el.localName === 'GroupAddress');
+  if (!nodes.length) throw new Error('Keine <GroupAddress>-Elemente in der Datei gefunden.');
+
+  const groups = [];
+  const parseWarnings = [];
+  nodes.forEach((el, i) => {
+    const address = el.getAttribute('Address');
+    if (!address) { parseWarnings.push(`Element ${i + 1}: keine Address-Angabe, übersprungen.`); return; }
+    groups.push({
+      address: address.trim(),
+      name: el.getAttribute('Name') || null,
+      description: el.getAttribute('Description') || null,
+      dpt: el.getAttribute('DPTs') || el.getAttribute('DatapointType') || el.getAttribute('Type') || null,
+    });
+  });
+  return { format: 'xml', groups, parseWarnings };
+}
+
+// Spalten über Alias-Namen erkennen (nicht Position) - ETS-Exporte variieren in der
+// exakten Kopfzeilen-Bezeichnung je nach Version/Sprache. Bestbemühte, defensiv
+// codierte Zuordnung, keine verifizierte Spezifikation (siehe Plan) - fehlt eine
+// erkennbare Adress-Spalte, wird laut abgebrochen statt still falsch zu parsen.
+const CSV_COLUMN_ALIASES = {
+  address:     ['address', 'adresse', 'ga', 'gruppenadresse'],
+  name:        ['name', 'bezeichnung'],
+  description: ['description', 'beschreibung'],
+  dpt:         ['dpt', 'dpts', 'datapointtype', 'typ', 'type'],
+};
+
+function parseEtsGroupAddressCsv(text) {
+  const rawLines = text.split(/\r\n|\n|\r/).filter(l => l.length > 0);
+  if (!rawLines.length) throw new Error('Die Datei enthält keine Zeilen.');
+
+  const semicolons = (rawLines[0].match(/;/g) || []).length;
+  const commas     = (rawLines[0].match(/,/g) || []).length;
+  const delimiter  = semicolons >= commas ? ';' : ',';
+
+  const rows   = rawLines.map(line => splitCsvLine(line, delimiter));
+  const header = rows[0].map(h => h.trim().toLowerCase());
+  const colIndex = {};
+  for (const [field, aliases] of Object.entries(CSV_COLUMN_ALIASES)) {
+    colIndex[field] = header.findIndex(h => aliases.includes(h));
+  }
+  if (colIndex.address === -1) {
+    throw new Error(`Keine Adress-Spalte gefunden. Gefundene Spalten: ${header.join(', ') || '(keine)'}.`);
+  }
+
+  const groups = [];
+  const parseWarnings = [];
+  rows.slice(1).forEach((row, i) => {
+    const address = (row[colIndex.address] || '').trim();
+    if (!address) { parseWarnings.push(`Zeile ${i + 2}: Adresse leer, übersprungen.`); return; }
+    groups.push({
+      address,
+      name:        colIndex.name        !== -1 ? (row[colIndex.name]        || '').trim() || null : null,
+      description: colIndex.description !== -1 ? (row[colIndex.description] || '').trim() || null : null,
+      dpt:         colIndex.dpt         !== -1 ? (row[colIndex.dpt]         || '').trim() || null : null,
+    });
+  });
+  return { format: 'csv', groups, parseWarnings };
+}
+
+// Einfacher, quoted-field-fähiger CSV-Split - keine neue Abhängigkeit für Phase 1.
+// Bekannte, akzeptierte Lücke: eingebettete Zeilenumbrüche innerhalb eines gequoteten
+// Felds werden nicht unterstützt (führt zu einer zusätzlichen, falsch getrennten Zeile
+// statt einem Fehler).
+function splitCsvLine(line, delimiter) {
+  const fields = [];
+  let cur = '', inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (inQuotes) {
+      if (c === '"' && line[i + 1] === '"') { cur += '"'; i++; }
+      else if (c === '"') { inQuotes = false; }
+      else { cur += c; }
+    } else if (c === '"') {
+      inQuotes = true;
+    } else if (c === delimiter) {
+      fields.push(cur); cur = '';
+    } else {
+      cur += c;
+    }
+  }
+  fields.push(cur);
+  return fields;
 }
 
 function backToProjects() {
@@ -1300,6 +1490,84 @@ const FUNCTION_CATALOG = Object.fromEntries(
   Object.entries(GA_SCHEME).map(([gewerk, def]) => [gewerk, Object.keys(def.functions)])
 );
 
+// ── ETS-Gruppenadressen-Validierung ─────────────────────────────────────────
+// Liest GA_SCHEME rückwärts statt vorwärts: dort wird ein Gerät zu einer Adresse
+// generiert, hier wird aus einer echten, in ETS bereits vergebenen Adresse abgeleitet,
+// was die Konvention an dieser Stelle erwartet hätte. Gleiche Quelldaten (von Paul
+// verifiziert, siehe knx-reference/gpa_mapping.json), keine neue Regel-Logik.
+const HAUPTGRUPPE_TO_GEWERK = Object.fromEntries(
+  Object.entries(GA_SCHEME).map(([gewerk, def]) => [def.hauptgruppe, gewerk])
+);
+
+function reverseLookupGA(addressStr) {
+  const m = /^(\d{1,2})\/(\d{1,2})\/(\d{1,3})$/.exec(String(addressStr || '').trim());
+  if (!m) return { valid3Level: false };
+  const haupt = +m[1], mittel = +m[2], sub = +m[3];
+  const outOfRange = haupt > 31 || mittel > 7 || sub > 255; // KNX-Protokollgrenzen, versionsunabhängig
+  const gewerk = HAUPTGRUPPE_TO_GEWERK[haupt] || null;
+  const def = gewerk ? GA_SCHEME[gewerk] : null;
+  return {
+    valid3Level: true, haupt, mittel, sub, outOfRange, gewerk,
+    gewerkLabel: gewerk ? GEWERK_LABELS[gewerk] : null,
+    mittelDef: def?.mittel?.[mittel] || null,
+  };
+}
+
+// "DPT-1.001" / "DPT 1.001" / "1.001" → "1.001" (Minor-Teil auf 3 Stellen normiert,
+// wie in GA_SCHEME hinterlegt) — macht unterschiedliche Schreibweisen vergleichbar.
+function normalizeDpt(raw) {
+  const m = raw ? /(\d{1,3})\.(\d{1,3})/.exec(String(raw)) : null;
+  return m ? `${+m[1]}.${String(+m[2]).padStart(3, '0')}` : null;
+}
+
+// Liefert {recs, conventionOk, total} — recs hat exakt die {level,title,text}-Form,
+// die renderRecCards() (siehe renderRecommendations()) schon rendert, kein neues UI nötig.
+function validateEtsGroups(groups) {
+  const recs = [];
+  const seen = new Map();
+  let conventionOk = 0;
+  groups.forEach((g, i) => {
+    const lu = reverseLookupGA(g.address);
+    if (!lu.valid3Level) {
+      recs.push({ level: 'low', title: `"${g.address}" ist keine 3-Ebenen-Adresse`,
+        text: `Zeile ${i + 2}: erwartet Hauptgruppe/Mittelgruppe/Untergruppe (z.B. "1/2/3").` });
+      return;
+    }
+    if (lu.outOfRange) {
+      recs.push({ level: 'high', title: `Adresse ${g.address} außerhalb des gültigen Bereichs`,
+        text: 'Hauptgruppe max. 31, Mittelgruppe max. 7, Untergruppe max. 255.' });
+    }
+    if (seen.has(g.address)) {
+      recs.push({ level: 'high', title: `Doppelte Gruppenadresse ${g.address}`,
+        text: `Bereits vergeben an "${seen.get(g.address)}".` });
+    } else {
+      seen.set(g.address, g.name || `Zeile ${i + 2}`);
+    }
+    if (!lu.gewerk) {
+      recs.push({ level: 'low', title: `Hauptgruppe ${lu.haupt} nicht in der Konvention`,
+        text: `Adresse ${g.address} ("${g.name || '–'}") nutzt eine Hauptgruppe außerhalb der 6 bekannten Gewerke (Beleuchtung/Verbraucher/Beschattung/Heizung/Kontakte/Umwelt).` });
+      return;
+    }
+    if (!lu.mittelDef) {
+      recs.push({ level: 'medium', title: `Mittelgruppe ${lu.mittel} unter ${lu.gewerkLabel} nicht definiert`,
+        text: `Adresse ${g.address} ("${g.name || '–'}") passt zu keiner bekannten Mittelgruppe.` });
+      return;
+    }
+    const expected = lu.mittelDef.dpt;
+    const actual = normalizeDpt(g.dpt);
+    if (expected && !actual) {
+      recs.push({ level: 'medium', title: `Kein DPT hinterlegt: ${g.address}`,
+        text: `Erwartet ${expected} (${lu.mittelDef.name}).` });
+    } else if (expected && actual !== expected) {
+      recs.push({ level: 'high', title: `DPT-Abweichung bei ${g.address}`,
+        text: `Konvention erwartet ${expected} (${lu.mittelDef.name}), Datei enthält ${actual || g.dpt}.` });
+    } else {
+      conventionOk++;
+    }
+  });
+  return { recs, conventionOk, total: groups.length };
+}
+
 // Jetplan-Typ/-Name → Gewerk-Vorschlag. Jetplans eigene Typen (siehe ELEMENT_LABELS)
 // kennen Heizung/Kontakte/Umwelt nicht — das Gewerk-Feld im Bearbeiten-Modal bleibt
 // deshalb frei umstellbar, das hier ist nur der Auto-Vorschlag beim ersten Öffnen.
@@ -1328,6 +1596,23 @@ dropZone.addEventListener('drop', e => {
   if (f) readFile(f);
 });
 
+const etsDropZone  = document.getElementById('ets-drop-zone');
+const etsFileInput = document.getElementById('ets-file-input');
+
+etsDropZone.addEventListener('click', () => etsFileInput.click());
+etsFileInput.addEventListener('change', e => {
+  const f = e.target.files[0];
+  if (f) handleNewEtsProjectFile(f);
+});
+etsDropZone.addEventListener('dragover', e => { e.preventDefault(); etsDropZone.classList.add('dragover'); });
+etsDropZone.addEventListener('dragleave', () => etsDropZone.classList.remove('dragover'));
+etsDropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  etsDropZone.classList.remove('dragover');
+  const f = e.dataTransfer.files[0];
+  if (f) handleNewEtsProjectFile(f);
+});
+
 function readFile(file) {
   const r = new FileReader();
   r.onload = ev => {
@@ -1342,7 +1627,13 @@ function readFile(file) {
 }
 
 // ── Data processing ────────────────────────────────────────────────────────
+// json.meta wird sonst nirgends gelesen (reiner Durchreich-Wert) - sourceType steuert
+// hier zwischen den beiden komplett getrennten Pipelines um. Alte Zeilen ohne dieses
+// Feld (jedes bisherige Jetplan-Projekt) fallen automatisch auf den Jetplan-Pfad,
+// kein Backfill nötig.
 function processData(json) {
+  if (json?.meta?.sourceType === 'ets_ga_export') { processEtsData(json); return; }
+
   const project = json.data.projects?.[0] || {};
   const unit    = json.data.units?.[0] || {};
 
@@ -1355,11 +1646,49 @@ function processData(json) {
 
   rebuild();
   persistProject(); // neu vergebene KNX-Objekt-Indizes sofort sichern, nicht erst beim nächsten Edit
+  applyTabVisibility('jetplan');
 
   document.getElementById('project-badge').textContent =
     `${project.name || '–'} / ${unit.unitCode || '–'}`;
 
   renderAll();
+}
+
+// Eigenständige, zur Jetplan-Pipeline parallele Verarbeitung für ETS-Gruppenadressen-
+// Importe (siehe parseEtsGroupExport()) - rebuild()/renderAll() greifen ungeschützt auf
+// PROJECT.items/.groups/.byFloor zu, die ein ETS-Projekt nicht hat, deshalb bewusst kein
+// if-Zweig in dieser bestehenden Logik, sondern ein komplett eigener Pfad.
+function processEtsData(json) {
+  PROJECT = {
+    sourceType: 'ets_ga_export',
+    project: json.data.project || { name: 'ETS-Projekt' },
+    meta: json.meta,
+    etsGroups: json.data.etsGroups || [],
+  };
+  PROJECT.validation = validateEtsGroups(PROJECT.etsGroups);
+  applyTabVisibility('ets_ga_export');
+
+  document.getElementById('project-badge').textContent = `${PROJECT.project.name || '–'} (ETS)`;
+
+  renderEtsValidation();
+}
+
+// Blendet die Tabs passend zum Projekttyp ein/aus (Jetplan: die bestehenden 6, ETS: nur
+// "Validierung", data-source="ets"). Muss von BEIDEN Pipelines aufgerufen werden, auch
+// der Jetplan-Seite - sonst blieben Tabs falsch versteckt, wenn nach einem ETS- ein
+// Jetplan-Projekt geöffnet wird (Tab-Sichtbarkeit ist globaler DOM-Zustand, nicht pro
+// Projekt). Wechselt per .click() (nicht eigene Logik) auf den ersten sichtbaren Tab,
+// falls der bisher aktive gerade versteckt wurde - nutzt damit den bestehenden
+// Tab-Klick-Handler statt ihn zu duplizieren.
+function applyTabVisibility(sourceType) {
+  const wantSource = sourceType === 'ets_ga_export' ? 'ets' : 'jetplan';
+  const tabs = [...document.querySelectorAll('#tabs .tab[data-source]')];
+  tabs.forEach(tab => { tab.style.display = tab.dataset.source === wantSource ? '' : 'none'; });
+  const activeTab = document.querySelector('#tabs .tab.active');
+  if (!activeTab || activeTab.style.display === 'none') {
+    const firstVisible = tabs.find(t => t.style.display !== 'none');
+    if (firstVisible) firstVisible.click();
+  }
 }
 
 // Berechnet alle abgeleiteten Strukturen (Etagen, Typen, Schaltgruppen, KNX-Adressen)
@@ -1584,10 +1913,12 @@ async function runPersist() {
   if (persistInFlight) { persistQueued = true; return; }
   persistInFlight = true;
   setSyncStatus('saving');
-  const payload = {
-    meta: PROJECT.meta,
-    data: { projects: [PROJECT.project], units: [PROJECT.unit], outletItems: PROJECT.items, switches: PROJECT.switches || [] }
-  };
+  // Phase 1 hat keine Editier-UI für ETS-Gruppen, nichts löst also aktuell ein erneutes
+  // Speichern auf diesem Pfad aus - Formzweig trotzdem rein defensiv vorhanden, damit ein
+  // künftiger Aufruf hier nicht versehentlich die Jetplan-Form über eine ETS-Zeile schreibt.
+  const payload = PROJECT.sourceType === 'ets_ga_export'
+    ? { meta: PROJECT.meta, data: { project: PROJECT.project, etsGroups: PROJECT.etsGroups } }
+    : { meta: PROJECT.meta, data: { projects: [PROJECT.project], units: [PROJECT.unit], outletItems: PROJECT.items, switches: PROJECT.switches || [] } };
   const { error } = await supabaseClient
     .from('projects')
     .update({ name: PROJECT.project?.name || null, unit_code: PROJECT.unit?.unitCode || null, data: payload })
@@ -2483,8 +2814,16 @@ function renderRecommendations() {
     });
   }
 
+  renderRecCards('static-recommendations', recs, 'Keine automatischen Empfehlungen gefunden.');
+}
+
+// Gemeinsame Karten-Darstellung für {level,title,text}-Listen - genutzt von den
+// automatischen Jetplan-Empfehlungen hier UND von der ETS-Validierung
+// (renderEtsValidation()), damit beide dasselbe .recommendation/.rec-*-CSS nutzen statt
+// es zu duplizieren.
+function renderRecCards(containerId, recs, emptyMessage) {
   const levelIcon = { high: '!', medium: '~', low: 'i' };
-  document.getElementById('static-recommendations').innerHTML = recs.length
+  document.getElementById(containerId).innerHTML = recs.length
     ? recs.map(r => `
         <div class="recommendation">
           <div class="rec-icon rec-${r.level}">${levelIcon[r.level]}</div>
@@ -2493,7 +2832,44 @@ function renderRecommendations() {
             <div class="rec-text">${escapeHtml(r.text)}</div>
           </div>
         </div>`).join('')
-    : '<p style="color:var(--text-secondary);font-size:13px;">Keine automatischen Empfehlungen gefunden.</p>';
+    : `<p style="color:var(--text-secondary);font-size:13px;">${escapeHtml(emptyMessage)}</p>`;
+}
+
+// ── ETS-Validierung ──────────────────────────────────────────────────────────
+function renderEtsValidation() {
+  const d = PROJECT;
+  const v = d.validation;
+  const highCount   = v.recs.filter(r => r.level === 'high').length;
+  const mediumCount = v.recs.filter(r => r.level === 'medium').length;
+  const lowCount    = v.recs.filter(r => r.level === 'low').length;
+
+  document.getElementById('ets-stats-grid').innerHTML = `
+    <div class="stat-card">
+      <div class="stat-label">Gruppenadressen</div>
+      <div class="stat-value">${v.total}</div>
+      <div class="stat-sub">${escapeHtml(d.meta?.sourceFileName || 'Datei')}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Konventionskonform</div>
+      <div class="stat-value">${v.conventionOk}</div>
+      <div class="stat-sub">von ${v.total}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Kritische Hinweise</div>
+      <div class="stat-value">${highCount}</div>
+      <div class="stat-sub">Hoch</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Weitere Hinweise</div>
+      <div class="stat-value">${mediumCount + lowCount}</div>
+      <div class="stat-sub">Mittel/Gering</div>
+    </div>
+  `;
+
+  // Übersprungene Zeilen beim Einlesen (z.B. leere Adresse) als eigene, niedrigstufige
+  // Hinweise voranstellen, damit sie nicht in den reinen Konventions-Funden untergehen.
+  const parseRecs = (d.meta?.parseWarnings || []).map(w => ({ level: 'low', title: 'Hinweis beim Einlesen', text: w }));
+  renderRecCards('ets-validation-results', [...parseRecs, ...v.recs], 'Alle Gruppenadressen entsprechen der Konvention.');
 }
 
 // ── AI Analysis ────────────────────────────────────────────────────────────
