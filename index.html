@@ -4,6 +4,14 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Jetplan → KNX Konverter</title>
+<script>
+  // Vor dem ersten Paint anwenden (blockierendes <head>-Script) - sonst kurzes Aufblitzen
+  // im falschen Farbschema beim Laden, wenn schon eine explizite Wahl gespeichert ist.
+  try {
+    var storedTheme = localStorage.getItem('knx-theme');
+    if (storedTheme === 'light' || storedTheme === 'dark') document.documentElement.dataset.theme = storedTheme;
+  } catch (e) {}
+</script>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -22,8 +30,11 @@
     --accent-inv: #ffffff;
   }
 
+  /* Dark Mode folgt per Default dem Betriebssystem. [data-theme] auf <html> (gesetzt vom
+     Umschalter unten, siehe toggleTheme()) überschreibt das explizit -
+     :not([data-theme="light"]) lässt eine bewusste Hell-Wahl auch bei dunklem OS gelten. */
   @media (prefers-color-scheme: dark) {
-    :root {
+    :root:not([data-theme="light"]) {
       --bg: #1c1c1a;
       --bg-secondary: #242422;
       --bg-tertiary: #2c2c2a;
@@ -35,27 +46,59 @@
       --accent: #f0eeea;
       --accent-inv: #1c1c1a;
     }
-    .badge-lighting { background: #412402 !important; color: #FAC775 !important; }
-    .badge-socket   { background: #042C53 !important; color: #85B7EB !important; }
-    .badge-switch   { background: #173404 !important; color: #C0DD97 !important; }
-    .badge-smarthome{ background: #26215C !important; color: #CECBF6 !important; }
-    .badge-data     { background: #04342C !important; color: #9FE1CB !important; }
-    .badge-distribution { background: #2C2C2A !important; color: #D3D1C7 !important; }
-    .badge-terminal { background: #3A2C12 !important; color: #E8C994 !important; }
-    .badge-lightningProtection { background: #3A1414 !important; color: #F0B8B8 !important; }
-    .badge-dimmen   { background: #4A2E02 !important; color: #FFCE8A !important; }
-    .badge-jalousie { background: #143A2E !important; color: #8FE0C4 !important; }
-    .badge-messen   { background: #1C3A14 !important; color: #B7E894 !important; }
-    .rec-high  { background: #501313 !important; color: #F7C1C1 !important; }
-    .rec-medium{ background: #412402 !important; color: #FAC775 !important; }
-    .rec-low   { background: #173404 !important; color: #C0DD97 !important; }
+    :root:not([data-theme="light"]) .badge-lighting { background: #412402 !important; color: #FAC775 !important; }
+    :root:not([data-theme="light"]) .badge-socket   { background: #042C53 !important; color: #85B7EB !important; }
+    :root:not([data-theme="light"]) .badge-switch   { background: #173404 !important; color: #C0DD97 !important; }
+    :root:not([data-theme="light"]) .badge-smarthome{ background: #26215C !important; color: #CECBF6 !important; }
+    :root:not([data-theme="light"]) .badge-data     { background: #04342C !important; color: #9FE1CB !important; }
+    :root:not([data-theme="light"]) .badge-distribution { background: #2C2C2A !important; color: #D3D1C7 !important; }
+    :root:not([data-theme="light"]) .badge-terminal { background: #3A2C12 !important; color: #E8C994 !important; }
+    :root:not([data-theme="light"]) .badge-lightningProtection { background: #3A1414 !important; color: #F0B8B8 !important; }
+    :root:not([data-theme="light"]) .badge-dimmen   { background: #4A2E02 !important; color: #FFCE8A !important; }
+    :root:not([data-theme="light"]) .badge-jalousie { background: #143A2E !important; color: #8FE0C4 !important; }
+    :root:not([data-theme="light"]) .badge-messen   { background: #1C3A14 !important; color: #B7E894 !important; }
+    :root:not([data-theme="light"]) .rec-high  { background: #501313 !important; color: #F7C1C1 !important; }
+    :root:not([data-theme="light"]) .rec-medium{ background: #412402 !important; color: #FAC775 !important; }
+    :root:not([data-theme="light"]) .rec-low   { background: #173404 !important; color: #C0DD97 !important; }
     /* KI-Status-Punkt: Lichtmodus-Farben liefern zwar noch ausreichend Kontrast gegen den
        dunklen ai-box-Hintergrund (gemessen 3,95-7,15:1), aber ohne eigene Abstimmung wie
        bei den Badges - hier etwas heller/gesättigter für den Dark Mode. */
-    .ai-dot           { background: #2DBF8E !important; }
-    .ai-dot.thinking  { background: #F5B04A !important; }
-    .ai-dot.error     { background: #F26D6C !important; }
+    :root:not([data-theme="light"]) .ai-dot           { background: #2DBF8E !important; }
+    :root:not([data-theme="light"]) .ai-dot.thinking  { background: #F5B04A !important; }
+    :root:not([data-theme="light"]) .ai-dot.error     { background: #F26D6C !important; }
   }
+
+  /* Explizite Dunkel-Wahl per Umschalter - gleiche Werte wie oben, aber unabhängig vom OS
+     (gilt auch wenn prefers-color-scheme hell ist). */
+  :root[data-theme="dark"] {
+    --bg: #1c1c1a;
+    --bg-secondary: #242422;
+    --bg-tertiary: #2c2c2a;
+    --text: #f0eeea;
+    --text-secondary: #999992;
+    --text-tertiary: #666660;
+    --border: rgba(255,255,255,0.1);
+    --border-md: rgba(255,255,255,0.2);
+    --accent: #f0eeea;
+    --accent-inv: #1c1c1a;
+  }
+  :root[data-theme="dark"] .badge-lighting { background: #412402 !important; color: #FAC775 !important; }
+  :root[data-theme="dark"] .badge-socket   { background: #042C53 !important; color: #85B7EB !important; }
+  :root[data-theme="dark"] .badge-switch   { background: #173404 !important; color: #C0DD97 !important; }
+  :root[data-theme="dark"] .badge-smarthome{ background: #26215C !important; color: #CECBF6 !important; }
+  :root[data-theme="dark"] .badge-data     { background: #04342C !important; color: #9FE1CB !important; }
+  :root[data-theme="dark"] .badge-distribution { background: #2C2C2A !important; color: #D3D1C7 !important; }
+  :root[data-theme="dark"] .badge-terminal { background: #3A2C12 !important; color: #E8C994 !important; }
+  :root[data-theme="dark"] .badge-lightningProtection { background: #3A1414 !important; color: #F0B8B8 !important; }
+  :root[data-theme="dark"] .badge-dimmen   { background: #4A2E02 !important; color: #FFCE8A !important; }
+  :root[data-theme="dark"] .badge-jalousie { background: #143A2E !important; color: #8FE0C4 !important; }
+  :root[data-theme="dark"] .badge-messen   { background: #1C3A14 !important; color: #B7E894 !important; }
+  :root[data-theme="dark"] .rec-high  { background: #501313 !important; color: #F7C1C1 !important; }
+  :root[data-theme="dark"] .rec-medium{ background: #412402 !important; color: #FAC775 !important; }
+  :root[data-theme="dark"] .rec-low   { background: #173404 !important; color: #C0DD97 !important; }
+  :root[data-theme="dark"] .ai-dot           { background: #2DBF8E !important; }
+  :root[data-theme="dark"] .ai-dot.thinking  { background: #F5B04A !important; }
+  :root[data-theme="dark"] .ai-dot.error     { background: #F26D6C !important; }
 
   body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
@@ -505,6 +548,7 @@
       <span id="user-email" style="font-size:12px;color:var(--text-secondary);"></span>
       <button class="btn btn-sm" onclick="signOut()">Abmelden</button>
     </div>
+    <button class="icon-btn" id="theme-toggle-btn" onclick="toggleTheme()" title="Farbschema umschalten" style="align-self:center;">☾</button>
     <div class="header-badge" id="project-badge">Kein Projekt geladen</div>
   </div>
 
@@ -1435,6 +1479,36 @@ function setSyncStatus(state) {
   document.getElementById('sync-status').textContent =
     { saving: 'Speichert…', saved: 'Gespeichert', error: 'Fehler beim Speichern' }[state] || '';
 }
+
+// Umschalter fürs Farbschema - Default folgt dem OS (prefers-color-scheme, siehe CSS oben),
+// [data-theme] auf <html> überschreibt das explizit und wird in localStorage gemerkt (pro
+// Browser/Gerät, gleiches Muster wie ONBOARDING_HINT_KEY/ACTOR_PREFS_KEY). Die Kopie in
+// localStorage wird schon im <head>-Script gelesen (vor dem ersten Paint), hier nur noch
+// Klick-Handling und Icon-Sync.
+const THEME_KEY = 'knx-theme';
+
+function isDarkActive() {
+  const explicit = document.documentElement.dataset.theme;
+  if (explicit) return explicit === 'dark';
+  return window.matchMedia('(prefers-color-scheme: dark)').matches;
+}
+
+function syncThemeToggleButton() {
+  const btn = document.getElementById('theme-toggle-btn');
+  if (!btn) return;
+  const dark = isDarkActive();
+  btn.textContent = dark ? '☀' : '☾';
+  btn.title = dark ? 'Zu hellem Farbschema wechseln' : 'Zu dunklem Farbschema wechseln';
+}
+
+function toggleTheme() {
+  const next = isDarkActive() ? 'light' : 'dark';
+  document.documentElement.dataset.theme = next;
+  try { localStorage.setItem(THEME_KEY, next); } catch {}
+  syncThemeToggleButton();
+}
+
+syncThemeToggleButton();
 
 initAuth();
 
