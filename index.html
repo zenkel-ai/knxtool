@@ -124,6 +124,7 @@
     padding: 1.5rem 2rem 1.25rem;
     border-bottom: 0.5px solid var(--border);
     display: flex;
+    flex-wrap: wrap;
     align-items: flex-start;
     justify-content: space-between;
     gap: 1rem;
@@ -548,7 +549,7 @@
       <span id="user-email" style="font-size:12px;color:var(--text-secondary);"></span>
       <button class="btn btn-sm" onclick="signOut()">Abmelden</button>
     </div>
-    <button class="icon-btn" id="theme-toggle-btn" onclick="toggleTheme()" title="Farbschema umschalten" style="align-self:center;">☾</button>
+    <button class="btn btn-sm" id="theme-toggle-btn" onclick="toggleTheme()" title="Farbschema umschalten" style="align-self:center;font-size:14px;">☾ Dunkel</button>
     <div class="header-badge" id="project-badge">Kein Projekt geladen</div>
   </div>
 
@@ -1497,7 +1498,7 @@ function syncThemeToggleButton() {
   const btn = document.getElementById('theme-toggle-btn');
   if (!btn) return;
   const dark = isDarkActive();
-  btn.textContent = dark ? '☀' : '☾';
+  btn.textContent = dark ? '☀ Hell' : '☾ Dunkel';
   btn.title = dark ? 'Zu hellem Farbschema wechseln' : 'Zu dunklem Farbschema wechseln';
 }
 
