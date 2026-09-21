@@ -921,11 +921,11 @@ async function loadProjectsList() {
     .from('projects')
     .select('id,name,unit_code,updated_at')
     .order('updated_at', { ascending: false });
-  if (error) { tbody.innerHTML = `<tr><td colspan="4">Fehler: ${error.message}</td></tr>`; return; }
+  if (error) { tbody.innerHTML = `<tr><td colspan="4">Fehler: ${escapeHtml(error.message)}</td></tr>`; return; }
   tbody.innerHTML = data.length ? data.map(p => `
     <tr>
-      <td>${p.name || '–'}</td>
-      <td>${p.unit_code || '–'}</td>
+      <td>${escapeHtml(p.name || '–')}</td>
+      <td>${escapeHtml(p.unit_code || '–')}</td>
       <td>${new Date(p.updated_at).toLocaleString('de-DE')}</td>
       <td style="display:flex;gap:6px;">
         <button class="btn btn-sm btn-primary" onclick="openProject('${p.id}')">Öffnen</button>
@@ -1047,10 +1047,16 @@ async function openBillingPortal() {
 // gespeichertes XSS (z.B. Einladung an "<img src=x onerror=...>@x.de"). textContent wäre
 // die einfachere Lösung gewesen, aber die Zeile mischt Text mit einem bedingten Button,
 // daher hier gezielt escapen statt der ganzen Zeile die Struktur zu nehmen.
+// Sicher sowohl als Text-Inhalt ("<span>${escapeHtml(x)}</span>") als auch innerhalb
+// eines gequoteten Attributwerts ("value=\"${escapeHtml(x)}\"") - div.innerHTML allein
+// entkommt & < > bei Textknoten, aber NICHT " oder ' (die sind nur innerhalb von
+// Attributwerten besonders, nicht in Textinhalt) - ein Name wie `" onmouseover="...` würde
+// sonst aus einem value="..."-Attribut ausbrechen. Deshalb zusätzlich Anführungszeichen
+// selbst ersetzt, damit dieselbe Funktion überall gefahrlos einsetzbar ist.
 function escapeHtml(str) {
   const div = document.createElement('div');
-  div.textContent = str;
-  return div.innerHTML;
+  div.textContent = str ?? '';
+  return div.innerHTML.replaceAll('"', '&quot;').replaceAll("'", '&#39;');
 }
 
 // Team-Verwaltung (Phase 4): organization_members hat keine E-Mail-Spalte (nur user_id),
@@ -1728,20 +1734,20 @@ function renderSwitches() {
 
   unassignedEl.innerHTML = unassigned.length
     ? `Noch nicht auf einem Taster: <strong>${unassigned.length}</strong> Funktion(en)
-       <ul>${unassigned.map(g => `<li>${switchGroupLabel(g)}</li>`).join('')}</ul>`
+       <ul>${unassigned.map(g => `<li>${escapeHtml(switchGroupLabel(g))}</li>`).join('')}</ul>`
     : `Alle ${groups.length} KNX-Funktionen sind auf mindestens einem Taster platziert.`;
 
   const optionsHtml = selectedId => `<option value="">– frei –</option>` +
-    groups.map(g => `<option value="${g.id}" ${g.id === selectedId ? 'selected' : ''}>${switchGroupLabel(g)}</option>`).join('');
+    groups.map(g => `<option value="${g.id}" ${g.id === selectedId ? 'selected' : ''}>${escapeHtml(switchGroupLabel(g))}</option>`).join('');
 
   listEl.innerHTML = switches.length ? switches.map(sw => `
     <div class="switch-plate">
       <div class="switch-plate-header">
-        <input type="text" name="sw-name" value="${sw.name}" onchange="updateSwitchField('${sw.id}','name',this.value)">
-        <input type="text" name="sw-floor" placeholder="Etage" value="${sw.floor || ''}" onchange="updateSwitchField('${sw.id}','floor',this.value)">
-        <input type="text" name="sw-room" placeholder="Raum" value="${sw.room || ''}" onchange="updateSwitchField('${sw.id}','room',this.value)">
+        <input type="text" name="sw-name" value="${escapeHtml(sw.name)}" onchange="updateSwitchField('${sw.id}','name',this.value)">
+        <input type="text" name="sw-floor" placeholder="Etage" value="${escapeHtml(sw.floor || '')}" onchange="updateSwitchField('${sw.id}','floor',this.value)">
+        <input type="text" name="sw-room" placeholder="Raum" value="${escapeHtml(sw.room || '')}" onchange="updateSwitchField('${sw.id}','room',this.value)">
         <label style="font-size:11px;color:var(--text-secondary);">Tasten
-          <input type="number" name="sw-count" min="1" max="8" value="${sw.buttonCount}" onchange="updateSwitchField('${sw.id}','buttonCount',this.value)">
+          <input type="number" name="sw-count" min="1" max="8" value="${escapeHtml(String(sw.buttonCount))}" onchange="updateSwitchField('${sw.id}','buttonCount',this.value)">
         </label>
         <button class="icon-btn" style="margin-left:auto;" onclick="deleteSwitch('${sw.id}')">Löschen</button>
       </div>
@@ -1840,7 +1846,7 @@ function renderBOM() {
     <tr>
       <td>${row.label}</td>
       <td style="font-weight:500;">${row.channels}</td>
-      <td><input type="text" value="${row.product.replace(/"/g, '&quot;')}" onchange="updateActorPref('${row.key}', 'product', this.value)" style="width:100%;padding:4px 6px;border:0.5px solid var(--border-md);border-radius:6px;background:var(--bg);color:var(--text);font-size:12px;"></td>
+      <td><input type="text" value="${escapeHtml(row.product)}" onchange="updateActorPref('${row.key}', 'product', this.value)" style="width:100%;padding:4px 6px;border:0.5px solid var(--border-md);border-radius:6px;background:var(--bg);color:var(--text);font-size:12px;"></td>
       <td><input type="number" min="1" value="${row.channelsPerUnit}" onchange="updateActorPref('${row.key}', 'channelsPerUnit', this.value)" style="width:56px;padding:4px 6px;border:0.5px solid var(--border-md);border-radius:6px;background:var(--bg);color:var(--text);font-size:12px;"></td>
       <td style="font-weight:500;">${row.units || '–'}</td>
     </tr>
@@ -1863,8 +1869,8 @@ function renderOverview() {
   document.getElementById('stats-grid').innerHTML = `
     <div class="stat-card">
       <div class="stat-label">Projekt</div>
-      <div class="stat-value sm">${d.project.name || '–'}</div>
-      <div class="stat-sub">${d.unit.unitCode || ''}</div>
+      <div class="stat-value sm">${escapeHtml(d.project.name || '–')}</div>
+      <div class="stat-sub">${escapeHtml(d.unit.unitCode || '')}</div>
     </div>
     <div class="stat-card">
       <div class="stat-label">Elemente gesamt</div>
@@ -1914,13 +1920,13 @@ function renderOverview() {
     html += `
       <div style="margin-bottom:16px;">
         <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px;">
-          <span style="font-size:13px;font-weight:500;">${floor}</span>
+          <span style="font-size:13px;font-weight:500;">${escapeHtml(floor)}</span>
           <span style="font-size:12px;color:var(--text-secondary);">${items.length} Elemente</span>
         </div>
         <div class="progress-bar"><div class="progress-fill" style="width:${pct}%;"></div></div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:5px;">
           ${Object.entries(typeCounts).map(([t, c]) =>
-            `<span class="badge badge-${t}">${ELEMENT_LABELS[t] || t}: ${c}</span>`
+            `<span class="badge badge-${escapeHtml(t)}">${escapeHtml(ELEMENT_LABELS[t] || t)}: ${c}</span>`
           ).join('')}
         </div>
       </div>`;
@@ -1955,12 +1961,19 @@ function updateSortIndicators(rowId, sortState) {
 function renderGroups() {
   const floors = ['all', ...new Set(PROJECT.groups.map(g => g.floor))];
   document.getElementById('group-floor-filter').innerHTML = floors.map(f =>
-    `<button class="floor-btn ${f === 'all' ? 'active' : ''}" onclick="filterGroups(this,'${f}')">${f === 'all' ? 'Alle Etagen' : f}</button>`
+    `<button class="floor-btn ${f === 'all' ? 'active' : ''}" data-floor="${escapeHtml(f)}" onclick="filterGroups(this)">${f === 'all' ? 'Alle Etagen' : escapeHtml(f)}</button>`
   ).join('');
   renderGroupsTable('all');
 }
 
-function filterGroups(btn, floor) {
+// btn.dataset.floor statt eines direkt in den onclick-String interpolierten Etagennamens:
+// bei Werten aus dem Jetplan-Import wäre HTML-Escaping allein hier NICHT ausreichend
+// gewesen — der Name landet sonst in einem JS-String-Literal innerhalb eines
+// Event-Handler-Attributs, und &#39; wird beim Parsen der Attribute wieder zu ' decodiert,
+// BEVOR der String als JS ausgeführt wird (der HTML-Escape entkommt dem also nicht).
+// Ein data-Attribut ist dagegen ein normaler Attributwert, kein verschachtelter JS-Kontext.
+function filterGroups(btn) {
+  const floor = btn.dataset.floor;
   activeFloorGroup = floor;
   document.querySelectorAll('#group-floor-filter .floor-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
@@ -2002,13 +2015,13 @@ function renderGroupsTable(floor) {
 
   document.getElementById('groups-table').innerHTML = groups.length ? groups.map(g => `
     <tr>
-      <td><strong>${g.id}</strong></td>
-      <td>${g.floor}</td>
-      <td style="font-size:12px;color:var(--text-secondary);max-width:220px;">${g.rooms.join(', ') || '–'}</td>
-      <td>${g.types.map(t => `<span class="badge badge-${t}">${ELEMENT_LABELS[t] || t}</span>`).join(' ')}</td>
-      <td>${g.gewerk ? `<span class="badge badge-${GEWERK_BADGE[g.gewerk]}">${g.functionLabel}</span>` : `<span style="color:var(--text-tertiary);">–</span>`}</td>
+      <td><strong>${escapeHtml(g.id)}</strong></td>
+      <td>${escapeHtml(g.floor)}</td>
+      <td style="font-size:12px;color:var(--text-secondary);max-width:220px;">${escapeHtml(g.rooms.join(', ')) || '–'}</td>
+      <td>${g.types.map(t => `<span class="badge badge-${escapeHtml(t)}">${escapeHtml(ELEMENT_LABELS[t] || t)}</span>`).join(' ')}</td>
+      <td>${g.gewerk ? `<span class="badge badge-${GEWERK_BADGE[g.gewerk]}">${escapeHtml(g.functionLabel)}</span>` : `<span style="color:var(--text-tertiary);">–</span>`}</td>
       <td style="font-weight:500;">${g.items.length}</td>
-      <td>${g.knxAddresses.length ? `<div class="knx-addr-list">${g.knxAddresses.map(a => `<span>${a.label}: <code>${a.address}</code></span>`).join('')}</div>` : `<span style="color:var(--text-tertiary);font-size:11px;">${g.gewerk ? 'Adressbereich unvollständig' : 'kein Gewerk'}</span>`}</td>
+      <td>${g.knxAddresses.length ? `<div class="knx-addr-list">${g.knxAddresses.map(a => `<span>${escapeHtml(a.label)}: <code>${escapeHtml(a.address)}</code></span>`).join('')}</div>` : `<span style="color:var(--text-tertiary);font-size:11px;">${g.gewerk ? 'Adressbereich unvollständig' : 'kein Gewerk'}</span>`}</td>
     </tr>
   `).join('') : `<tr><td colspan="7"><div class="empty-state">Keine Schaltgruppen gefunden. Weise in der Geräteliste passenden Geräten eine Gruppen-ID sowie Gewerk/Funktion zu, damit hier Adressen erscheinen.</div></td></tr>`;
 }
@@ -2017,12 +2030,15 @@ function renderGroupsTable(floor) {
 function renderDevices() {
   const floors = ['all', ...new Set(PROJECT.items.map(i => i.level).filter(Boolean))];
   document.getElementById('device-floor-filter').innerHTML = floors.map(f =>
-    `<button class="floor-btn ${f === 'all' ? 'active' : ''}" onclick="filterDevices(this,'${f}')">${f === 'all' ? 'Alle Etagen' : f}</button>`
+    `<button class="floor-btn ${f === 'all' ? 'active' : ''}" data-floor="${escapeHtml(f)}" onclick="filterDevices(this)">${f === 'all' ? 'Alle Etagen' : escapeHtml(f)}</button>`
   ).join('');
   renderDevicesTable('all');
 }
 
-function filterDevices(btn, floor) {
+// Siehe Kommentar bei filterGroups() - data-Attribut statt in den onclick-String
+// interpolierter Etagenname, aus demselben Grund (HTML-Escaping schützt dort nicht).
+function filterDevices(btn) {
+  const floor = btn.dataset.floor;
   activeFloorDevice = floor;
   document.querySelectorAll('#device-floor-filter .floor-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
@@ -2074,17 +2090,17 @@ function renderDevicesTable(floor) {
     const gewerk = effectiveGewerk(item);
     const relevant = isKnxRelevant(item);
     const funcBadge = func
-      ? `<span class="badge badge-${GEWERK_BADGE[gewerk] || 'terminal'}">${FUNCTION_LABELS[func] || func}</span>`
+      ? `<span class="badge badge-${GEWERK_BADGE[gewerk] || 'terminal'}">${escapeHtml(FUNCTION_LABELS[func] || func)}</span>`
       : `<span style="color:var(--text-tertiary);">–</span>`;
     return `
       <tr class="${relevant ? '' : 'row-dimmed'}">
-        <td><span class="badge badge-${type}">${ELEMENT_LABELS[type] || type}</span></td>
+        <td><span class="badge badge-${escapeHtml(type)}">${escapeHtml(ELEMENT_LABELS[type] || type)}</span></td>
         <td>${funcBadge}</td>
-        <td style="font-size:12px;">${item.element?.name || '–'}</td>
-        <td>${item.level || '–'}</td>
-        <td style="font-size:12px;">${item.room || '–'}</td>
-        <td><code>${item.fuse || '–'}</code></td>
-        <td style="font-size:11px;color:var(--text-secondary);">${(item.groupIds || []).join(', ') || '–'}</td>
+        <td style="font-size:12px;">${escapeHtml(item.element?.name || '–')}</td>
+        <td>${escapeHtml(item.level || '–')}</td>
+        <td style="font-size:12px;">${escapeHtml(item.room || '–')}</td>
+        <td><code>${escapeHtml(item.fuse || '–')}</code></td>
+        <td style="font-size:11px;color:var(--text-secondary);">${escapeHtml((item.groupIds || []).join(', ')) || '–'}</td>
         <td class="row-actions">
           <button class="icon-btn" onclick="openDeviceModal('${item.id}')">Bearbeiten</button>
           <button class="icon-btn" onclick="toggleKnxRelevant('${item.id}')">${relevant ? 'Ausblenden' : 'Einblenden'}</button>
@@ -2227,7 +2243,7 @@ function populateFunctionOptions(gewerk, selectedValue) {
   sel.innerHTML = '<option value="">– keine –</option>' +
     functions.map(f => `<option value="${f}">${FUNCTION_LABELS[f] || f}</option>`).join('');
   if (selectedValue && !functions.includes(selectedValue)) {
-    sel.insertAdjacentHTML('beforeend', `<option value="${selectedValue}">${FUNCTION_LABELS[selectedValue] || selectedValue} (nicht im Katalog)</option>`);
+    sel.insertAdjacentHTML('beforeend', `<option value="${escapeHtml(selectedValue)}">${escapeHtml(FUNCTION_LABELS[selectedValue] || selectedValue)} (nicht im Katalog)</option>`);
   }
   sel.value = selectedValue || '';
 }
@@ -2473,8 +2489,8 @@ function renderRecommendations() {
         <div class="recommendation">
           <div class="rec-icon rec-${r.level}">${levelIcon[r.level]}</div>
           <div>
-            <div class="rec-title">${r.title}</div>
-            <div class="rec-text">${r.text}</div>
+            <div class="rec-title">${escapeHtml(r.title)}</div>
+            <div class="rec-text">${escapeHtml(r.text)}</div>
           </div>
         </div>`).join('')
     : '<p style="color:var(--text-secondary);font-size:13px;">Keine automatischen Empfehlungen gefunden.</p>';
