@@ -274,7 +274,22 @@ begin
     raise exception 'QUOTA_EXCEEDED: Kein Projekt-Kontingent mehr verfügbar.';
   end if;
 
-  insert into public.credit_events (organization_id, delta, reason, project_id) values (org, -1, 'project_created', new.id);
+  return new;
+end;
+$$;
+
+-- Ledger-Eintrag bewusst in einem SEPARATEN after-insert-Trigger, nicht im obigen
+-- before-insert-Trigger: new.id hat als Spalten-Default zwar schon einen Wert, wenn der
+-- before-Trigger läuft, aber die projects-Zeile selbst existiert noch nicht in der
+-- Tabelle - ein insert in credit_events mit project_id = new.id verletzt daher IMMER den
+-- FK credit_events_project_id_fkey (produktiv aufgefallen: jedes Projekt-Anlegen schlug
+-- fehl, nicht nur bei aufgebrauchtem Kontingent). Im after-Trigger existiert die Zeile
+-- bereits, new.organization_id trägt schon den vom Trigger oben gesetzten Wert.
+create or replace function public.log_project_credit_event()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  insert into public.credit_events (organization_id, delta, reason, project_id)
+    values (new.organization_id, -1, 'project_created', new.id);
   return new;
 end;
 $$;
@@ -282,6 +297,10 @@ $$;
 drop trigger if exists trg_projects_assign_org_and_enforce_quota on public.projects;
 create trigger trg_projects_assign_org_and_enforce_quota before insert on public.projects
   for each row execute function public.assign_org_and_enforce_quota();
+
+drop trigger if exists trg_projects_log_credit_event on public.projects;
+create trigger trg_projects_log_credit_event after insert on public.projects
+  for each row execute function public.log_project_credit_event();
 
 -- ═══════════════════════════════════════════════════════════════════════════
 -- Stripe-Anbindung — Phase 2 (Einmalkauf)
