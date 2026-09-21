@@ -158,6 +158,20 @@ create policy organization_invites_insert_owner
     )
   );
 
+-- Phase 4: owner kann eine noch offene (nicht eingelöste) Einladung zurückziehen -
+-- gleiche owner-Bedingung wie beim Anlegen, kein separates "consumed_at is null" nötig
+-- (der eindeutige Index auf pending-Einladungen sorgt ohnehin dafür, dass eine bereits
+-- eingelöste Zeile für einen erneuten Einladungsversuch nicht im Weg steht).
+create policy organization_invites_delete_owner
+  on public.organization_invites for delete to authenticated
+  using (
+    organization_id = public.current_org_id()
+    and exists (
+      select 1 from public.organization_members m
+      where m.organization_id = public.current_org_id() and m.user_id = auth.uid() and m.role = 'owner'
+    )
+  );
+
 create policy credit_events_select_own_org
   on public.credit_events for select to authenticated
   using (organization_id = public.current_org_id());

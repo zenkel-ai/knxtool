@@ -10,6 +10,9 @@ verify_jwt = true
 [functions.create-checkout-session]
 verify_jwt = true
 
+[functions.create-portal-session]
+verify_jwt = true
+
 [functions.stripe-webhook]
 # Bewusst false: Stripe hat kein Supabase-JWT. Die echte Absicherung ist Stripes eigene
 # Signaturprüfung im Funktionscode (STRIPE_WEBHOOK_SECRET).
