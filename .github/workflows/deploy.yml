@@ -40,4 +40,4 @@ jobs:
               git clone https://github.com/zenkel-ai/knxtool.git "$DEPLOY_DIR"
             fi
 
-            echo "✓ Deployment erfolgreich: knxtool.seed2peak.group"
+            echo "✓ Deployment erfolgreich: app.knx-toolbox.de (+ knxtool.seed2peak.group)"

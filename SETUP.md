@@ -46,6 +46,13 @@ ssh bzipjy@www728.your-server.de -p 222
 > ⚠️ Das Verzeichnis `/html/knxtool` ist vollständig getrennt vom bestehenden
 > Webroot `/html/` — die bestehende Website unter seed2peak.group bleibt unberührt.
 
+> ℹ️ **2026-09-22:** Zusätzlich als Subdomain `app.knx-toolbox.de` (KonsoleH,
+> eigener Domain-Account) mit demselben Zielverzeichnis eingerichtet — beide Domains
+> liefern exakt denselben Deploy-Pfad aus, kein zweiter Workflow nötig. `app.knx-
+> toolbox.de` ist die aktuelle Haupt-URL, `knxtool.seed2peak.group` bleibt parallel
+> erreichbar (siehe `project_knxtool_domain_migration`-Memory für den Stand der
+> Umstellung).
+
 ---
 
 ## Schritt 4 — GitHub Secret anlegen
@@ -85,14 +92,14 @@ git branch -M main
 git push -u origin main
 ```
 
-GitHub Actions startet jetzt automatisch und deployed auf `knxtool.seed2peak.group`.
+GitHub Actions startet jetzt automatisch und deployed auf `app.knx-toolbox.de` (+ `knxtool.seed2peak.group`).
 
 ---
 
 ## Schritt 6 — Deployment prüfen
 
 1. GitHub → Tab **Actions** → grüner Haken = erfolgreich
-2. https://knxtool.seed2peak.group aufrufen
+2. https://app.knx-toolbox.de aufrufen
 
 ---
 
@@ -117,7 +124,7 @@ git push
 | SSH User | `bzipjy` |
 | SSH Port | `222` |
 | Deploy-Pfad | `~/public_html/html/knxtool` |
-| Live-URL | https://knxtool.seed2peak.group |
+| Live-URL | https://app.knx-toolbox.de (+ https://knxtool.seed2peak.group) |
 | GitHub Repo | https://github.com/zenkel-ai/knxtool |
 
 ---
@@ -128,7 +135,7 @@ git push
 → Public Key nochmal in KonsoleH prüfen. Testen: `ssh bzipjy@www728.your-server.de -p 222`
 
 **Subdomain zeigt nichts**
-→ DNS braucht manchmal bis zu 30 Min. Testen: `ping knxtool.seed2peak.group`
+→ DNS braucht manchmal bis zu 30 Min. Testen: `ping app.knx-toolbox.de`
 
 **git clone schlägt fehl auf Server**
 → Das Repo ist Private? Dann HTTPS-Clone mit Token oder Repo auf Public stellen.

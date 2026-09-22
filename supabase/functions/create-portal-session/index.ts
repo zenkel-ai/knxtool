@@ -45,7 +45,7 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ error: "Noch kein Kauf getätigt — es gibt noch nichts zu verwalten." }, 400);
   }
 
-  const appUrl = req.headers.get("origin") || "https://knxtool.seed2peak.group";
+  const appUrl = req.headers.get("origin") || "https://app.knx-toolbox.de";
   const portalSession = await stripe.billingPortal.sessions.create({
     customer: org.stripe_customer_id,
     return_url: `${appUrl}/`,

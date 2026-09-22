@@ -2,7 +2,7 @@
 
 Web-App zur Analyse von Jetplan-Stromlaufplänen und Generierung von KNX-Projektdaten.
 
-**Live:** https://knxtool.seed2peak.group
+**Live:** https://app.knx-toolbox.de (weiterhin erreichbar auch unter der alten Domain https://knxtool.seed2peak.group)
 
 ---
 
@@ -19,7 +19,7 @@ Web-App zur Analyse von Jetplan-Stromlaufplänen und Generierung von KNX-Projekt
 
 ## Deployment
 
-Die App deployed automatisch auf `knxtool.seed2peak.group` bei jedem Push auf `main`.
+Die App deployed automatisch auf `app.knx-toolbox.de` bei jedem Push auf `main` (dasselbe Verzeichnis ist zusätzlich noch unter der alten Domain `knxtool.seed2peak.group` erreichbar).
 
 ### Einmalige Einrichtung (siehe SETUP.md)
 

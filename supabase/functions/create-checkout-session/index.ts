@@ -92,7 +92,7 @@ Deno.serve(async (req: Request) => {
     await admin.from("organizations").update({ stripe_customer_id: customerId }).eq("id", org.id);
   }
 
-  const appUrl = req.headers.get("origin") || "https://knxtool.seed2peak.group";
+  const appUrl = req.headers.get("origin") || "https://app.knx-toolbox.de";
   const session = await stripe.checkout.sessions.create({
     customer: customerId,
     mode: planType === "one_time" ? "payment" : "subscription",
