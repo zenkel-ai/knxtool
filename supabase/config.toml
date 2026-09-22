@@ -2,6 +2,20 @@
 # Dev-Stack), daher kein vollständiges `supabase init`-Scaffold mit db/studio/etc.
 project_id = "qmbmskthgxdmybvqyoax"
 
+# Nur additional_redirect_urls deklariert - alle anderen [auth]-Werte (site_url,
+# email/mfa/sms-Settings) bleiben dadurch "undeclared" und unangetastet (siehe
+# `supabase config diff`, das das vor jedem Push bestätigt). Magic-Link-Login
+# (index.html, signInWithOtp mit emailRedirectTo = window.location.origin + Pfad)
+# schlägt sonst auf jeder Domain fehl, die hier nicht steht. Alte Domain bleibt
+# während der Umstellung auf app.knx-toolbox.de bewusst zusätzlich erlaubt.
+[auth]
+additional_redirect_urls = [
+  "https://knxtool.seed2peak.group",
+  "https://knxtool.seed2peak.group/**",
+  "https://app.knx-toolbox.de",
+  "https://app.knx-toolbox.de/**",
+]
+
 [functions.ask-ai]
 # Nur eingeloggte Nutzer:innen (gültiges Supabase-JWT) dürfen die Funktion aufrufen -
 # das ist die eigentliche Zugriffsschranke, siehe supabase/functions/ask-ai/index.ts.
