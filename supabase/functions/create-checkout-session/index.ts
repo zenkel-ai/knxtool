@@ -104,6 +104,11 @@ Deno.serve(async (req: Request) => {
     // explizit auf subscription_data gesetzt (nur relevant für planType 'subscription',
     // in Phase 2 ungenutzt, schon für Phase 3 vorbereitet).
     ...(planType === "subscription" ? { subscription_data: { metadata: { organization_id: org.id } } } : {}),
+    // Ohne das erzeugt ein mode:'payment'-Checkout standardmäßig KEINE Stripe-Rechnung -
+    // nur mit dieser Option taucht ein Einzelkauf im Stripe-Kundenportal ("Abo verwalten")
+    // unter Rechnungsverlauf auf. Nur für 'payment' gültig, Abos bekommen ohnehin pro
+    // Abrechnungszyklus automatisch eine Rechnung, diese Option existiert für sie nicht.
+    ...(planType === "one_time" ? { invoice_creation: { enabled: true } } : {}),
     success_url: `${appUrl}/?checkout=success`,
     cancel_url: `${appUrl}/?checkout=cancel`,
   });

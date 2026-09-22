@@ -1238,7 +1238,7 @@ async function loadQuota() {
         ${remaining > 0 ? `${remaining} Projekt${remaining === 1 ? '' : 'e'} verfügbar${detail}` : 'Kein Projekt-Kontingent mehr verfügbar'}
         ${renewalInfo ? `<br>${renewalInfo}` : ''}
       </span>
-      ${data.stripe_customer_id ? `<button class="btn btn-sm" onclick="openBillingPortal()">Abo verwalten</button>` : ''}
+      ${data.stripe_customer_id ? `<button class="btn btn-sm" onclick="openBillingPortal()">Rechnungen &amp; Abo</button>` : ''}
       <button class="btn btn-sm" onclick="startCheckout('one_time')">+ Einzelprojekt (219€)</button>
       ${hasActiveSubscription ? '' : `<button class="btn btn-sm btn-primary" onclick="startCheckout('subscription')">+ Jahreslizenz (1.997€/Jahr)</button>`}
     </div>`;
