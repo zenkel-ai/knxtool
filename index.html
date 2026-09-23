@@ -917,7 +917,7 @@ async function handleSession(session) {
   if (!currentUser) { showPanel('auth'); return; }
 
   const { error } = await supabaseClient.rpc('bootstrap_org');
-  if (error) alert('Konnte Team-Zuordnung nicht laden: ' + error.message);
+  if (error) await appAlert('Konnte Team-Zuordnung nicht laden: ' + error.message);
 
   // supabase-js prüft/erneuert die Session u.a. bei Tab-Fokus, was onAuthStateChange
   // erneut feuern lässt (initAuth() filtert bewusst nicht nach Event-Typ) - ohne diese
@@ -1037,7 +1037,7 @@ async function openProject(id) {
   if (btn) { btn.disabled = true; btn.textContent = 'Öffnet…'; }
   const { data, error } = await supabaseClient.from('projects').select('data').eq('id', id).single();
   if (error) {
-    alert('Projekt konnte nicht geladen werden: ' + error.message);
+    await appAlert('Projekt konnte nicht geladen werden: ' + error.message);
     if (btn) { btn.disabled = false; btn.textContent = originalText; }
     return;
   }
@@ -1047,12 +1047,12 @@ async function openProject(id) {
 }
 
 async function deleteProjectRow(id) {
-  if (!confirm('Dieses Projekt wirklich unwiderruflich löschen?')) return;
+  if (!(await appConfirm('Dieses Projekt wirklich unwiderruflich löschen?'))) return;
   const btn = event?.target;
   if (btn) { btn.disabled = true; btn.textContent = 'Löscht…'; }
   const { error } = await supabaseClient.from('projects').delete().eq('id', id);
   if (error) {
-    alert('Löschen fehlgeschlagen: ' + error.message);
+    await appAlert('Löschen fehlgeschlagen: ' + error.message);
     if (btn) { btn.disabled = false; btn.textContent = 'Löschen'; }
     return;
   }
@@ -1069,9 +1069,9 @@ async function handleNewProjectFile(json) {
     .select('id').single();
   if (error) {
     if (error.message?.includes('QUOTA_EXCEEDED')) {
-      alert('Kein Projekt-Kontingent mehr verfügbar. Bitte oben in der Projektliste Kontingent nachkaufen.');
+      await appAlert('Kein Projekt-Kontingent mehr verfügbar. Bitte oben in der Projektliste Kontingent nachkaufen.');
     } else {
-      alert('Projekt konnte nicht angelegt werden: ' + error.message);
+      await appAlert('Projekt konnte nicht angelegt werden: ' + error.message);
     }
     return;
   }
@@ -1091,11 +1091,11 @@ async function handleNewEtsProjectFile(file) {
   try {
     parsed = await parseEtsGroupExport(file);
   } catch (err) {
-    alert('ETS-Datei konnte nicht gelesen werden:\n' + err.message);
+    await appAlert('ETS-Datei konnte nicht gelesen werden:\n' + err.message);
     return;
   }
   if (!parsed.groups.length) {
-    alert('Keine Gruppenadressen in der Datei gefunden.');
+    await appAlert('Keine Gruppenadressen in der Datei gefunden.');
     return;
   }
   const projectName = file.name.replace(/\.[^.]+$/, '') || 'ETS-Projekt';
@@ -1112,9 +1112,9 @@ async function handleNewEtsProjectFile(file) {
     .select('id').single();
   if (error) {
     if (error.message?.includes('QUOTA_EXCEEDED')) {
-      alert('Kein Projekt-Kontingent mehr verfügbar. Bitte oben in der Projektliste Kontingent nachkaufen.');
+      await appAlert('Kein Projekt-Kontingent mehr verfügbar. Bitte oben in der Projektliste Kontingent nachkaufen.');
     } else {
-      alert('Projekt konnte nicht angelegt werden: ' + error.message);
+      await appAlert('Projekt konnte nicht angelegt werden: ' + error.message);
     }
     return;
   }
@@ -1294,12 +1294,12 @@ async function openBillingPortal() {
   const { data, error } = await supabaseClient.functions.invoke('create-portal-session', { body: {} });
   if (error) {
     const detail = await error.context?.json?.().catch(() => null);
-    alert('Abo-Verwaltung konnte nicht geöffnet werden: ' + (detail?.error || error.message));
+    await appAlert('Abo-Verwaltung konnte nicht geöffnet werden: ' + (detail?.error || error.message));
     if (btn) { btn.disabled = false; btn.textContent = originalText; }
     return;
   }
   if (data?.error) {
-    alert('Abo-Verwaltung konnte nicht geöffnet werden: ' + data.error);
+    await appAlert('Abo-Verwaltung konnte nicht geöffnet werden: ' + data.error);
     if (btn) { btn.disabled = false; btn.textContent = originalText; }
     return;
   }
@@ -1369,7 +1369,7 @@ async function inviteTeamMember() {
   const { error } = await supabaseClient.from('organization_invites')
     .insert({ organization_id: await getCurrentOrgId(), email, invited_by: user?.id });
   if (error) {
-    alert(error.code === '23505'
+    await appAlert(error.code === '23505'
       ? 'Diese E-Mail-Adresse wurde bereits eingeladen.'
       : 'Einladung fehlgeschlagen: ' + error.message);
     if (btn) { btn.disabled = false; btn.textContent = originalText; }
@@ -1382,7 +1382,7 @@ async function inviteTeamMember() {
 
 async function cancelInvite(inviteId) {
   const { error } = await supabaseClient.from('organization_invites').delete().eq('id', inviteId);
-  if (error) { alert('Einladung konnte nicht zurückgezogen werden: ' + error.message); return; }
+  if (error) { await appAlert('Einladung konnte nicht zurückgezogen werden: ' + error.message); return; }
   loadTeamSection();
 }
 
@@ -1398,12 +1398,12 @@ async function startCheckout(planType) {
   const { data, error } = await supabaseClient.functions.invoke('create-checkout-session', { body: { planType } });
   if (error) {
     const detail = await error.context?.json?.().catch(() => null);
-    alert('Checkout konnte nicht gestartet werden: ' + (detail?.error || error.message));
+    await appAlert('Checkout konnte nicht gestartet werden: ' + (detail?.error || error.message));
     if (btn) { btn.disabled = false; btn.textContent = originalText; }
     return;
   }
   if (data?.error) {
-    alert('Checkout konnte nicht gestartet werden: ' + data.error);
+    await appAlert('Checkout konnte nicht gestartet werden: ' + data.error);
     if (btn) { btn.disabled = false; btn.textContent = originalText; }
     return;
   }
@@ -1419,7 +1419,7 @@ async function startCheckout(planType) {
   if (!checkout) return;
   history.replaceState(null, '', window.location.pathname);
   if (checkout === 'success') {
-    setTimeout(() => { alert('Kauf erfolgreich! Kontingent wird in Kürze aktualisiert.'); loadQuota(); }, 500);
+    setTimeout(async () => { await appAlert('Kauf erfolgreich! Kontingent wird in Kürze aktualisiert.'); loadQuota(); }, 500);
   }
 })();
 
@@ -1689,12 +1689,12 @@ etsDropZone.addEventListener('drop', e => {
 
 function readFile(file) {
   const r = new FileReader();
-  r.onload = ev => {
+  r.onload = async ev => {
     try {
       const json = JSON.parse(ev.target.result);
       handleNewProjectFile(json);
     } catch (err) {
-      alert('Fehler: Ungültige JSON-Datei.\n' + err.message);
+      await appAlert('Fehler: Ungültige JSON-Datei.\n' + err.message);
     }
   };
   r.readAsText(file);
@@ -1820,7 +1820,7 @@ async function startGoal(goalKey) {
     .from('projects')
     .select('id,name,unit_code,updated_at,sourceType:data->meta->>sourceType')
     .order('updated_at', { ascending: false });
-  if (error) { alert('Projekte konnten nicht geladen werden: ' + error.message); return; }
+  if (error) { await appAlert('Projekte konnten nicht geladen werden: ' + error.message); return; }
 
   const matches = data.filter(p => goal.sourceType === 'ets'
     ? p.sourceType === 'ets_ga_export'
@@ -1865,9 +1865,85 @@ function showProjectPicker(goal, projects) {
 
 renderGoalsGrid();
 
-// Berechnet alle abgeleiteten Strukturen (Etagen, Typen, Schaltgruppen, KNX-Adressen)
-// neu aus PROJECT.items. Wird nach jedem Import UND nach jeder Bearbeitung aufgerufen,
-// damit Änderungen sofort überall (Übersicht, Gruppen, Empfehlungen, Export) ankommen.
+// Ersatz für die nativen alert()/confirm()/prompt() - die kommen browserseitig
+// (Edge/Chrome) mit eigener, nicht stylebarer Chrome-Leiste ("Diese Seite sagt…") statt
+// im App-Look. Promise-basiert, damit jeder bisherige Aufrufer strukturell gleich bleibt
+// (if (!confirm(...)) return; → if (!(await appConfirm(...))) return; usw.) - nur die
+// aufrufende Funktion muss async sein. Gleiches .modal-overlay/.modal-box-CSS wie beim
+// Geräte-Modal und showProjectPicker() oben, dynamisch gebaut aus demselben Grund wie dort.
+function appAlert(message, title) {
+  return new Promise(resolve => {
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.innerHTML = `
+      <div class="modal-box">
+        <h3>${escapeHtml(title || 'Hinweis')}</h3>
+        <p style="font-size:13px;color:var(--text-secondary);white-space:pre-wrap;">${escapeHtml(message)}</p>
+        <div class="modal-actions"><div class="right"><button class="btn btn-sm btn-primary" id="app-dialog-ok">OK</button></div></div>
+      </div>`;
+    const close = () => { overlay.remove(); resolve(); };
+    overlay.onclick = e => { if (e.target === overlay) close(); };
+    overlay.querySelector('#app-dialog-ok').onclick = close;
+    document.body.appendChild(overlay);
+    overlay.querySelector('#app-dialog-ok').focus();
+  });
+}
+
+// Löst wie confirm() mit true/false auf (Abbrechen/Klick daneben = false).
+function appConfirm(message, title) {
+  return new Promise(resolve => {
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.innerHTML = `
+      <div class="modal-box">
+        <h3>${escapeHtml(title || 'Bestätigen')}</h3>
+        <p style="font-size:13px;color:var(--text-secondary);white-space:pre-wrap;">${escapeHtml(message)}</p>
+        <div class="modal-actions"><div class="right">
+          <button class="btn btn-sm" id="app-dialog-cancel">Abbrechen</button>
+          <button class="btn btn-sm btn-primary" id="app-dialog-ok">OK</button>
+        </div></div>
+      </div>`;
+    const settle = val => { overlay.remove(); resolve(val); };
+    overlay.onclick = e => { if (e.target === overlay) settle(false); };
+    overlay.querySelector('#app-dialog-ok').onclick = () => settle(true);
+    overlay.querySelector('#app-dialog-cancel').onclick = () => settle(false);
+    document.body.appendChild(overlay);
+    overlay.querySelector('#app-dialog-ok').focus();
+  });
+}
+
+// Löst wie prompt() mit dem eingegebenen String oder null (Abbrechen/Klick daneben) auf
+// - (await appPrompt(...) || '').trim() ersetzt (prompt(...) || '').trim() 1:1.
+function appPrompt(message, defaultValue, title) {
+  return new Promise(resolve => {
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.innerHTML = `
+      <div class="modal-box">
+        <h3>${escapeHtml(title || 'Eingabe')}</h3>
+        <p style="font-size:13px;color:var(--text-secondary);">${escapeHtml(message)}</p>
+        <div class="form-row"><input type="text" id="app-dialog-input"></div>
+        <div class="modal-actions"><div class="right">
+          <button class="btn btn-sm" id="app-dialog-cancel">Abbrechen</button>
+          <button class="btn btn-sm btn-primary" id="app-dialog-ok">OK</button>
+        </div></div>
+      </div>`;
+    const input = overlay.querySelector('#app-dialog-input');
+    input.value = defaultValue || '';
+    const settle = val => { overlay.remove(); resolve(val); };
+    overlay.onclick = e => { if (e.target === overlay) settle(null); };
+    overlay.querySelector('#app-dialog-ok').onclick = () => settle(input.value);
+    overlay.querySelector('#app-dialog-cancel').onclick = () => settle(null);
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Enter') { e.preventDefault(); settle(input.value); }
+      else if (e.key === 'Escape') { e.preventDefault(); settle(null); }
+    });
+    document.body.appendChild(overlay);
+    input.focus();
+    input.select();
+  });
+}
+
 // Erzeugt neue IDs für manuell angelegte roomStructure-Einträge nach demselben Muster
 // wie überall sonst im Code für manuell angelegte Datensätze (saveDeviceFromModal,
 // newSwitch).
@@ -1907,6 +1983,9 @@ function reconcileRoomStructure() {
   }
 }
 
+// Berechnet alle abgeleiteten Strukturen (Etagen, Typen, Schaltgruppen, KNX-Adressen)
+// neu aus PROJECT.items. Wird nach jedem Import UND nach jeder Bearbeitung aufgerufen,
+// damit Änderungen sofort überall (Übersicht, Gruppen, Empfehlungen, Export) ankommen.
 function rebuild() {
   reconcileRoomStructure();
   const items = PROJECT.items;
@@ -2247,8 +2326,8 @@ function newSwitch() {
   persistProject();
 }
 
-function deleteSwitch(id) {
-  if (!confirm('Diesen Taster wirklich löschen?')) return;
+async function deleteSwitch(id) {
+  if (!(await appConfirm('Diesen Taster wirklich löschen?'))) return;
   PROJECT.switches = (PROJECT.switches || []).filter(s => s.id !== id);
   renderSwitches();
   persistProject();
@@ -2568,14 +2647,14 @@ function startInlineEdit(td, item) {
 }
 
 // Übernimmt dasselbe "trim + bei leer löschen"-Muster wie saveDeviceFromModal().
-function finishInlineEdit(item, field, rawValue) {
+async function finishInlineEdit(item, field, rawValue) {
   const value = rawValue.trim();
   switch (field) {
     case 'type':
       item.element = { ...item.element, type: value };
       break;
     case 'name':
-      if (!value) { alert('Name darf nicht leer sein.'); renderDevicesTable(activeFloorDevice); return; }
+      if (!value) { await appAlert('Name darf nicht leer sein.'); renderDevicesTable(activeFloorDevice); return; }
       item.element = { ...item.element, name: value };
       break;
     case 'level':
@@ -2991,32 +3070,32 @@ function renderRoomEntry(floor, room, roomItems, isFirst, isLast) {
   return roomDetails;
 }
 
-function addFloor() {
-  const name = (prompt('Name der neuen Etage:') || '').trim();
+async function addFloor() {
+  const name = ((await appPrompt('Name der neuen Etage:')) || '').trim();
   if (!name) return;
-  if (PROJECT.roomStructure.some(f => f.name === name)) { alert('Diese Etage gibt es schon.'); return; }
+  if (PROJECT.roomStructure.some(f => f.name === name)) { await appAlert('Diese Etage gibt es schon.'); return; }
   PROJECT.roomStructure.push({ id: newStructureId('floor'), name, rooms: [] });
   rebuild();
   renderAll();
   persistProject();
 }
 
-function addRoom(floorId) {
+async function addRoom(floorId) {
   const floor = PROJECT.roomStructure.find(f => f.id === floorId);
   if (!floor) return;
-  const name = (prompt('Name des neuen Raums:') || '').trim();
+  const name = ((await appPrompt('Name des neuen Raums:')) || '').trim();
   if (!name) return;
-  if (floor.rooms.some(r => r.name === name)) { alert('Diesen Raum gibt es in dieser Etage schon.'); return; }
+  if (floor.rooms.some(r => r.name === name)) { await appAlert('Diesen Raum gibt es in dieser Etage schon.'); return; }
   floor.rooms.push({ id: newStructureId('room'), name });
   rebuild();
   renderAll();
   persistProject();
 }
 
-function renameFloor(floorId) {
+async function renameFloor(floorId) {
   const floor = PROJECT.roomStructure.find(f => f.id === floorId);
   if (!floor) return;
-  const newLabel = (prompt('Neuer Geschoss-Name:', floor.name) || '').trim();
+  const newLabel = ((await appPrompt('Neuer Geschoss-Name:', floor.name)) || '').trim();
   if (!newLabel || newLabel === floor.name) return;
   const oldLabel = floor.name;
   PROJECT.items.forEach(i => { if ((i.level || 'Unbekannt') === oldLabel) i.level = newLabel; });
@@ -3026,11 +3105,11 @@ function renameFloor(floorId) {
   persistProject();
 }
 
-function renameRoom(floorId, roomId) {
+async function renameRoom(floorId, roomId) {
   const floor = PROJECT.roomStructure.find(f => f.id === floorId);
   const room  = floor?.rooms.find(r => r.id === roomId);
   if (!room) return;
-  const newRoom = (prompt('Neuer Raum-Name:', room.name) || '').trim();
+  const newRoom = ((await appPrompt('Neuer Raum-Name:', room.name)) || '').trim();
   if (!newRoom || newRoom === room.name) return;
   const oldRoom = room.name;
   PROJECT.items.forEach(i => {
@@ -3042,25 +3121,25 @@ function renameRoom(floorId, roomId) {
   persistProject();
 }
 
-function deleteFloor(floorId) {
+async function deleteFloor(floorId) {
   const floor = PROJECT.roomStructure.find(f => f.id === floorId);
   if (!floor) return;
   const stillUsed = PROJECT.items.some(i => (i.level || 'Unbekannt') === floor.name);
-  if (stillUsed) { alert('Erst Geräte verschieben oder löschen — diese Etage wird noch von Geräten verwendet.'); return; }
-  if (!confirm(`Etage "${floor.name}" wirklich löschen?`)) return;
+  if (stillUsed) { await appAlert('Erst Geräte verschieben oder löschen — diese Etage wird noch von Geräten verwendet.'); return; }
+  if (!(await appConfirm(`Etage "${floor.name}" wirklich löschen?`))) return;
   PROJECT.roomStructure = PROJECT.roomStructure.filter(f => f.id !== floorId);
   rebuild();
   renderAll();
   persistProject();
 }
 
-function deleteRoom(floorId, roomId) {
+async function deleteRoom(floorId, roomId) {
   const floor = PROJECT.roomStructure.find(f => f.id === floorId);
   const room  = floor?.rooms.find(r => r.id === roomId);
   if (!room) return;
   const stillUsed = PROJECT.items.some(i => (i.level || 'Unbekannt') === floor.name && (i.room || '') === room.name);
-  if (stillUsed) { alert('Erst Geräte verschieben oder löschen — dieser Raum wird noch von Geräten verwendet.'); return; }
-  if (!confirm(`Raum "${room.name}" wirklich löschen?`)) return;
+  if (stillUsed) { await appAlert('Erst Geräte verschieben oder löschen — dieser Raum wird noch von Geräten verwendet.'); return; }
+  if (!(await appConfirm(`Raum "${room.name}" wirklich löschen?`))) return;
   floor.rooms = floor.rooms.filter(r => r.id !== roomId);
   rebuild();
   renderAll();
@@ -3198,7 +3277,7 @@ function closeDeviceModal() {
   editingDeviceId = null;
 }
 
-function saveDeviceFromModal() {
+async function saveDeviceFromModal() {
   const type       = document.getElementById('dm-type').value;
   const name       = document.getElementById('dm-name').value.trim();
   const level      = document.getElementById('dm-level').value.trim();
@@ -3208,7 +3287,7 @@ function saveDeviceFromModal() {
   const knxGewerk   = document.getElementById('dm-gewerk').value || null;
   const knxFunction = document.getElementById('dm-function').value || null;
 
-  if (!name) { alert('Bitte einen Namen/Bezeichnung angeben.'); return; }
+  if (!name) { await appAlert('Bitte einen Namen/Bezeichnung angeben.'); return; }
 
   if (editingDeviceId) {
     const item = PROJECT.items.find(i => i.id === editingDeviceId);
@@ -3241,9 +3320,9 @@ function saveDeviceFromModal() {
   persistProject();
 }
 
-function deleteDeviceFromModal() {
+async function deleteDeviceFromModal() {
   if (!editingDeviceId) return;
-  if (!confirm('Dieses Gerät wirklich löschen?')) return;
+  if (!(await appConfirm('Dieses Gerät wirklich löschen?'))) return;
   PROJECT.items = PROJECT.items.filter(i => i.id !== editingDeviceId);
   closeDeviceModal();
   rebuild();
