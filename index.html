@@ -679,7 +679,13 @@
         </div>
         <div class="floor-filter" id="device-floor-filter"></div>
         <div class="table-toolbar">
-          <input type="search" id="device-search" placeholder="Suchen (Name, Raum, Sicherung, Gruppe …)" oninput="renderDevicesTable(activeFloorDevice)">
+          <input type="search" id="device-search" placeholder="Suchen (Name, Raum, Gruppe …)" oninput="renderDevicesTable(activeFloorDevice)">
+          <select id="device-gewerk-filter" onchange="setDeviceGewerkFilter(this.value)"></select>
+          <select id="device-groupby" onchange="setDeviceGroupBy(this.value)">
+            <option value="none">Keine Gruppierung</option>
+            <option value="level">Nach Etage</option>
+            <option value="room">Nach Etage + Raum</option>
+          </select>
           <button class="btn btn-sm" id="relevance-toggle-btn" onclick="toggleRelevanceFilter()">Alle anzeigen</button>
           <button class="btn btn-sm btn-primary" onclick="openDeviceModal(null)">+ Neues Gerät</button>
         </div>
@@ -688,11 +694,11 @@
             <thead>
               <tr id="devices-thead-row">
                 <th class="sortable" data-key="type">Typ <span class="sort-arrow"></span></th>
+                <th class="sortable" data-key="gewerk">Gewerk <span class="sort-arrow"></span></th>
                 <th class="sortable" data-key="function">Funktion <span class="sort-arrow"></span></th>
                 <th class="sortable" data-key="name">Name <span class="sort-arrow"></span></th>
                 <th class="sortable" data-key="level">Etage <span class="sort-arrow"></span></th>
                 <th class="sortable" data-key="room">Raum <span class="sort-arrow"></span></th>
-                <th class="sortable" data-key="fuse">Sicherung <span class="sort-arrow"></span></th>
                 <th class="sortable" data-key="groups">Gruppe(n)</th>
                 <th></th>
               </tr>
@@ -829,11 +835,11 @@
     </div>
     <div class="form-row">
       <label>Etage</label>
-      <input type="text" id="dm-level" placeholder="z.B. OG">
+      <select id="dm-level" onchange="onDeviceLevelChange()"></select>
     </div>
     <div class="form-row">
       <label>Raum</label>
-      <input type="text" id="dm-room" placeholder="z.B. Wohnzimmer OG">
+      <select id="dm-room"></select>
     </div>
     <div class="form-row">
       <label>Sicherung</label>
@@ -863,11 +869,23 @@ let PROJECT = null;
 let activeFloorGroup = 'all';
 let activeFloorDevice = 'all';
 let deviceRelevanceFilter = 'relevant'; // 'relevant' | 'all' — siehe isKnxRelevant()
+let deviceGewerkFilter = 'all'; // 'all' | ein Schlüssel aus GA_SCHEME — siehe effectiveGewerk()
+let deviceGroupBy = 'none'; // 'none' | 'level' | 'room' — reine Anzeige, nicht persistiert
 let editingDeviceId = null;
 let deviceSort = { key: null, dir: 1 };
 let groupSort  = { key: null, dir: 1 };
 let currentUser = null;
 let currentProjectId = null;
+
+// sessionStorage statt localStorage: überlebt einen vom Browser entladenen und wieder
+// aufgeweckten Hintergrund-Tab (Arbeitsspeicher-Sparmodus, mobile Browser), aber nicht
+// einen echten Neustart des Browsers - genau das verlangt die Projektauswahl-Persistenz
+// (siehe handleSession()).
+const PROJECT_ID_KEY = 'knx-current-project-id';
+function setCurrentProjectId(id) {
+  currentProjectId = id;
+  try { id ? sessionStorage.setItem(PROJECT_ID_KEY, id) : sessionStorage.removeItem(PROJECT_ID_KEY); } catch {}
+}
 
 // ── Supabase / Auth ──────────────────────────────────────────────────────────
 const SUPABASE_URL = 'https://qmbmskthgxdmybvqyoax.supabase.co';
@@ -896,16 +914,41 @@ async function handleSession(session) {
   currentUser = session?.user || null;
   document.getElementById('header-right').style.display = currentUser ? 'flex' : 'none';
   document.getElementById('user-email').textContent = currentUser?.email || '';
-  if (currentUser) {
-    const { error } = await supabaseClient.rpc('bootstrap_org');
-    if (error) alert('Konnte Team-Zuordnung nicht laden: ' + error.message);
-    showPanel('projects');
-    loadProjectsList();
+  if (!currentUser) { showPanel('auth'); return; }
+
+  const { error } = await supabaseClient.rpc('bootstrap_org');
+  if (error) alert('Konnte Team-Zuordnung nicht laden: ' + error.message);
+
+  // supabase-js prüft/erneuert die Session u.a. bei Tab-Fokus, was onAuthStateChange
+  // erneut feuern lässt (initAuth() filtert bewusst nicht nach Event-Typ) - ohne diese
+  // Prüfung würde das ein bereits offenes Projekt bei jedem Tab-Wechsel unnötig auf die
+  // Projektliste zurückwerfen, obwohl sich am Nutzer gar nichts geändert hat.
+  if (PROJECT && currentProjectId) {
     loadQuota();
     loadTeamSection();
-  } else {
-    showPanel('auth');
+    return;
   }
+
+  // Kein Projekt im Speicher offen - evtl. hat der Browser den Tab zwischenzeitlich
+  // wirklich entladen (Arbeitsspeicher-Sparmodus). sessionStorage übersteht das, die
+  // reine JS-Variable currentProjectId nicht.
+  let rememberedId = null;
+  try { rememberedId = sessionStorage.getItem(PROJECT_ID_KEY); } catch {}
+  if (rememberedId) {
+    const { data, error: loadError } = await supabaseClient.from('projects').select('data').eq('id', rememberedId).single();
+    if (!loadError) {
+      setCurrentProjectId(rememberedId);
+      processData(data.data);
+      showPanel('app');
+      return;
+    }
+    setCurrentProjectId(null); // Projekt gelöscht oder anderer Nutzer angemeldet - Merker verwerfen
+  }
+
+  showPanel('projects');
+  loadProjectsList();
+  loadQuota();
+  loadTeamSection();
 }
 
 async function sendMagicLink() {
@@ -922,7 +965,7 @@ async function sendMagicLink() {
 
 function signOut() {
   supabaseClient.auth.signOut();
-  currentProjectId = null;
+  setCurrentProjectId(null);
   PROJECT = null;
 }
 
@@ -998,7 +1041,7 @@ async function openProject(id) {
     if (btn) { btn.disabled = false; btn.textContent = originalText; }
     return;
   }
-  currentProjectId = id;
+  setCurrentProjectId(id);
   processData(data.data);
   showPanel('app');
 }
@@ -1032,7 +1075,7 @@ async function handleNewProjectFile(json) {
     }
     return;
   }
-  currentProjectId = data.id;
+  setCurrentProjectId(data.id);
   processData(payload);
   showPanel('app');
 }
@@ -1075,7 +1118,7 @@ async function handleNewEtsProjectFile(file) {
     }
     return;
   }
-  currentProjectId = data.id;
+  setCurrentProjectId(data.id);
   processData(payload);
   showPanel('app');
 }
@@ -1205,7 +1248,7 @@ function splitCsvLine(line, delimiter) {
 }
 
 function backToProjects() {
-  currentProjectId = null;
+  setCurrentProjectId(null);
   PROJECT = null;
   showPanel('projects');
   loadProjectsList();
@@ -1672,6 +1715,7 @@ function processData(json) {
     project, unit,
     items: json.data.outletItems || [],
     switches: json.data.switches || [],
+    roomStructure: json.data.roomStructure, // undefined bei altem/neuem Projekt - siehe reconcileRoomStructure()
     meta:  json.meta
   };
 
@@ -1824,7 +1868,47 @@ renderGoalsGrid();
 // Berechnet alle abgeleiteten Strukturen (Etagen, Typen, Schaltgruppen, KNX-Adressen)
 // neu aus PROJECT.items. Wird nach jedem Import UND nach jeder Bearbeitung aufgerufen,
 // damit Änderungen sofort überall (Übersicht, Gruppen, Empfehlungen, Export) ankommen.
+// Erzeugt neue IDs für manuell angelegte roomStructure-Einträge nach demselben Muster
+// wie überall sonst im Code für manuell angelegte Datensätze (saveDeviceFromModal,
+// newSwitch).
+function newStructureId(prefix) {
+  return prefix + '-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7);
+}
+
+// Gleicht PROJECT.roomStructure gegen die tatsächlichen level/room-Werte in
+// PROJECT.items ab - fügt fehlende Etagen/Räume an (append-only, sortiert/löscht nie
+// etwas um), damit eine manuelle Umsortierung im Editor nie durch einen Rebuild
+// rückgängig gemacht wird. Bei jedem bestehenden Projekt (roomStructure war bisher
+// undefined) entsteht hier beim ersten Laden nach diesem Feature einmalig eine
+// vollständige, sinnvoll sortierte Struktur - ohne manuellen Schritt, ohne Risiko für
+// bestehende Item-Daten.
+function reconcileRoomStructure() {
+  const isFirstBuild = !PROJECT.roomStructure;
+  PROJECT.roomStructure = PROJECT.roomStructure || [];
+  const floorByName = new Map(PROJECT.roomStructure.map(f => [f.name, f]));
+
+  PROJECT.items.forEach(item => {
+    const levelName = item.level || 'Unbekannt'; // gleicher Fallback wie im Raumbaum
+    let floor = floorByName.get(levelName);
+    if (!floor) {
+      floor = { id: newStructureId('floor'), name: levelName, rooms: [] };
+      PROJECT.roomStructure.push(floor);
+      floorByName.set(levelName, floor);
+    }
+    const roomName = item.room || '';
+    if (roomName && !floor.rooms.some(r => r.name === roomName)) {
+      floor.rooms.push({ id: newStructureId('room'), name: roomName });
+    }
+  });
+
+  if (isFirstBuild) {
+    const seen = new Map();
+    PROJECT.roomStructure.sort((a, b) => floorRank(a.name, seen) - floorRank(b.name, seen));
+  }
+}
+
 function rebuild() {
+  reconcileRoomStructure();
   const items = PROJECT.items;
   const byFloor = {};
   const byType  = {};
@@ -1908,6 +1992,16 @@ function toggleRelevanceFilter() {
   deviceRelevanceFilter = deviceRelevanceFilter === 'relevant' ? 'all' : 'relevant';
   document.getElementById('relevance-toggle-btn').textContent =
     deviceRelevanceFilter === 'relevant' ? 'Alle anzeigen' : 'Nur relevante';
+  renderDevicesTable(activeFloorDevice);
+}
+
+function setDeviceGewerkFilter(value) {
+  deviceGewerkFilter = value;
+  renderDevicesTable(activeFloorDevice);
+}
+
+function setDeviceGroupBy(value) {
+  deviceGroupBy = value;
   renderDevicesTable(activeFloorDevice);
 }
 
@@ -2048,7 +2142,7 @@ async function runPersist() {
   // künftiger Aufruf hier nicht versehentlich die Jetplan-Form über eine ETS-Zeile schreibt.
   const payload = PROJECT.sourceType === 'ets_ga_export'
     ? { meta: PROJECT.meta, data: { project: PROJECT.project, etsGroups: PROJECT.etsGroups } }
-    : { meta: PROJECT.meta, data: { projects: [PROJECT.project], units: [PROJECT.unit], outletItems: PROJECT.items, switches: PROJECT.switches || [] } };
+    : { meta: PROJECT.meta, data: { projects: [PROJECT.project], units: [PROJECT.unit], outletItems: PROJECT.items, switches: PROJECT.switches || [], roomStructure: PROJECT.roomStructure || [] } };
   const { error } = await supabaseClient
     .from('projects')
     .update({ name: PROJECT.project?.name || null, unit_code: PROJECT.unit?.unitCode || null, data: payload })
@@ -2411,6 +2505,106 @@ document.getElementById('devices-thead-row').addEventListener('click', e => {
   renderDevicesTable(activeFloorDevice);
 });
 
+// Ticket 1 - Inline-Edit per Doppelklick. Listener sitzt auf #devices-table (der
+// <tbody>) selbst statt auf einer einzelnen Zelle - dessen innerHTML wird bei jedem
+// Render komplett ersetzt, das Element selbst bleibt aber bestehen, Event-Delegation
+// funktioniert damit über Renders hinweg unverändert (gleiches Prinzip wie beim
+// Sortier-Klick-Handler oben auf #devices-thead-row).
+document.getElementById('devices-table').addEventListener('dblclick', e => {
+  const td = e.target.closest('td[data-field]');
+  if (!td || td.querySelector('select, input')) return; // schon im Editier-Modus
+  const tr = td.closest('tr[data-id]');
+  const item = tr && PROJECT.items.find(i => i.id === tr.dataset.id);
+  if (!item) return;
+  startInlineEdit(td, item);
+});
+
+function startInlineEdit(td, item) {
+  const field = td.dataset.field;
+  let settled = false;
+  const commit = value => { if (settled) return; settled = true; finishInlineEdit(item, field, value); };
+  const cancel = () => { if (settled) return; settled = true; renderDevicesTable(activeFloorDevice); };
+
+  let input;
+  if (field === 'type') {
+    input = document.createElement('select');
+    input.innerHTML = document.getElementById('dm-type').innerHTML; // gleiche fixe 8-Optionen-Liste wie im Modal
+    input.value = item.element?.type || 'lighting';
+  } else if (field === 'gewerk') {
+    input = document.createElement('select');
+    populateGewerkOptions(item.knxGewerk || effectiveGewerk(item) || '', input);
+  } else if (field === 'function') {
+    input = document.createElement('select');
+    populateFunctionOptions(item.knxGewerk || effectiveGewerk(item) || '', item.knxFunction || effectiveFunction(item) || '', input);
+  } else if (field === 'level') {
+    input = document.createElement('select');
+    populateLevelOptions(item.level || '', input);
+  } else if (field === 'room') {
+    input = document.createElement('select');
+    populateRoomOptions(item.level || '', item.room || '', input);
+  } else if (field === 'groups') {
+    input = document.createElement('input');
+    input.type = 'text';
+    input.value = (item.groupIds || []).join(', ');
+  } else { // 'name'
+    input = document.createElement('input');
+    input.type = 'text';
+    input.value = item.element?.name || '';
+  }
+  input.style.width = '100%';
+  input.style.fontSize = '12px';
+  const originalValue = input.value;
+
+  td.innerHTML = '';
+  td.appendChild(input);
+  input.focus();
+  input.select?.();
+
+  input.addEventListener('keydown', ev => {
+    if (ev.key === 'Enter') { ev.preventDefault(); commit(input.value); }
+    else if (ev.key === 'Escape') { ev.preventDefault(); cancel(); }
+  });
+  input.addEventListener('blur', () => { input.value === originalValue ? cancel() : commit(input.value); });
+}
+
+// Übernimmt dasselbe "trim + bei leer löschen"-Muster wie saveDeviceFromModal().
+function finishInlineEdit(item, field, rawValue) {
+  const value = rawValue.trim();
+  switch (field) {
+    case 'type':
+      item.element = { ...item.element, type: value };
+      break;
+    case 'name':
+      if (!value) { alert('Name darf nicht leer sein.'); renderDevicesTable(activeFloorDevice); return; }
+      item.element = { ...item.element, name: value };
+      break;
+    case 'level':
+      item.level = value;
+      break;
+    case 'room':
+      item.room = value;
+      break;
+    case 'groups': {
+      const groupIds = value.split(',').map(s => s.trim()).filter(Boolean);
+      if (groupIds.length) item.groupIds = groupIds; else delete item.groupIds;
+      break;
+    }
+    case 'gewerk':
+      if (value) item.knxGewerk = value; else delete item.knxGewerk;
+      // Eine gespeicherte Funktion, die zum neuen Gewerk nicht mehr passt, bliebe sonst
+      // als "nicht im Katalog" hängen, ohne dass das hier (anders als im Modal, wo
+      // Gewerk/Funktion nebeneinander live kaskadieren) sichtbar wäre.
+      if (item.knxFunction && !(FUNCTION_CATALOG[value] || []).includes(item.knxFunction)) delete item.knxFunction;
+      break;
+    case 'function':
+      if (value) item.knxFunction = value; else delete item.knxFunction;
+      break;
+  }
+  rebuild();
+  renderAll();
+  persistProject();
+}
+
 function updateSortIndicators(rowId, sortState) {
   document.querySelectorAll(`#${rowId} th.sortable`).forEach(th => {
     th.classList.remove('sort-asc', 'sort-desc');
@@ -2493,6 +2687,10 @@ function renderDevices() {
   document.getElementById('device-floor-filter').innerHTML = floors.map(f =>
     `<button class="floor-btn ${f === 'all' ? 'active' : ''}" data-floor="${escapeHtml(f)}" onclick="filterDevices(this)">${f === 'all' ? 'Alle Etagen' : escapeHtml(f)}</button>`
   ).join('');
+  const gewerkSelect = document.getElementById('device-gewerk-filter');
+  gewerkSelect.innerHTML = '<option value="all">Alle Gewerke</option>' +
+    Object.keys(GA_SCHEME).map(g => `<option value="${g}">${GEWERK_LABELS[g]}</option>`).join('');
+  gewerkSelect.value = deviceGewerkFilter;
   renderDevicesTable('all');
 }
 
@@ -2509,11 +2707,11 @@ function filterDevices(btn) {
 function deviceSortValue(item, key) {
   switch (key) {
     case 'type':     return (ELEMENT_LABELS[item.element?.type] || item.element?.type || '').toLowerCase();
+    case 'gewerk':   return (GEWERK_LABELS[effectiveGewerk(item)] || '').toLowerCase();
     case 'function': { const f = effectiveFunction(item); return f ? (FUNCTION_LABELS[f] || '').toLowerCase() : ''; }
     case 'name':     return (item.element?.name || '').toLowerCase();
     case 'level':    return (item.level || '').toLowerCase();
     case 'room':     return (item.room || '').toLowerCase();
-    case 'fuse':     return (item.fuse || '').toLowerCase();
     case 'groups':   return (item.groupIds || []).join(',').toLowerCase();
     default:         return '';
   }
@@ -2524,6 +2722,7 @@ function renderDevicesTable(floor) {
   let items = floor === 'all' ? PROJECT.items : PROJECT.items.filter(i => i.level === floor);
 
   if (deviceRelevanceFilter === 'relevant') items = items.filter(isKnxRelevant);
+  if (deviceGewerkFilter !== 'all') items = items.filter(i => effectiveGewerk(i) === deviceGewerkFilter);
 
   const q = (document.getElementById('device-search')?.value || '').trim().toLowerCase();
   if (q) {
@@ -2545,33 +2744,11 @@ function renderDevicesTable(floor) {
   updateSortIndicators('devices-thead-row', deviceSort);
 
   const show = items.slice(0, LIMIT);
-  document.getElementById('devices-table').innerHTML = show.length ? show.map(item => {
-    const type = item.element?.type || 'other';
-    const func = effectiveFunction(item);
-    const gewerk = effectiveGewerk(item);
-    const relevant = isKnxRelevant(item);
-    const funcBadge = func
-      ? `<span class="badge badge-${GEWERK_BADGE[gewerk] || 'terminal'}">${escapeHtml(FUNCTION_LABELS[func] || func)}</span>`
-      : `<span style="color:var(--text-tertiary);">–</span>`;
-    return `
-      <tr class="${relevant ? '' : 'row-dimmed'}">
-        <td><span class="badge badge-${escapeHtml(type)}">${escapeHtml(ELEMENT_LABELS[type] || type)}</span></td>
-        <td>${funcBadge}</td>
-        <td style="font-size:12px;">${escapeHtml(item.element?.name || '–')}</td>
-        <td>${escapeHtml(item.level || '–')}</td>
-        <td style="font-size:12px;">${escapeHtml(item.room || '–')}</td>
-        <td><code>${escapeHtml(item.fuse || '–')}</code></td>
-        <td style="font-size:11px;color:var(--text-secondary);">${escapeHtml((item.groupIds || []).join(', ')) || '–'}</td>
-        <td class="row-actions">
-          <button class="icon-btn" onclick="openDeviceModal('${item.id}')">Bearbeiten</button>
-          <button class="icon-btn" onclick="toggleKnxRelevant('${item.id}')">${relevant ? 'Ausblenden' : 'Einblenden'}</button>
-        </td>
-      </tr>`;
-  }).join('') : `<tr><td colspan="8"><div class="empty-state">${
+  document.getElementById('devices-table').innerHTML = !show.length ? `<tr><td colspan="8"><div class="empty-state">${
     q ? 'Keine Geräte für diese Suche gefunden.'
       : deviceRelevanceFilter === 'relevant' ? 'Keine relevanten Geräte gefunden — oben auf "Alle anzeigen" umschalten, falls Geräte als nicht relevant markiert sind.'
       : 'Keine Geräte gefunden.'
-  }</div></td></tr>`;
+  }</div></td></tr>` : deviceGroupBy === 'none' ? show.map(deviceRowHtml).join('') : renderGroupedDeviceRows(show);
 
   const moreEl = document.getElementById('devices-more');
   if (items.length > LIMIT) {
@@ -2582,11 +2759,76 @@ function renderDevicesTable(floor) {
   }
 }
 
-// ── Raum-/Geschossstruktur (Baumansicht) ─────────────────────────────────────
-// Objekte einem anderen Raum/Geschoss zuordnen geht bereits über das Bearbeiten-Modal
-// (dm-level/dm-room sind freie Textfelder). Der Mehrwert hier ist (1) die Hierarchie auf
-// einen Blick zu sehen und (2) einen falsch geschriebenen Geschoss-/Raumnamen in einem
-// Schritt für alle betroffenen Objekte zu korrigieren, statt jedes Gerät einzeln zu öffnen.
+// Ein einzelnes Zeilen-Template, das sowohl von der flachen als auch der nach
+// Etage/Raum gruppierten Ansicht genutzt wird (Ticket 6) - data-id/data-field tragen
+// keine Werte in onclick-Strings, sondern werden vom Inline-Edit-Handler unten per
+// Event-Delegation gelesen (Ticket 1).
+function deviceRowHtml(item) {
+  const type = item.element?.type || 'other';
+  const func = effectiveFunction(item);
+  const gewerk = effectiveGewerk(item);
+  const relevant = isKnxRelevant(item);
+  const funcBadge = func
+    ? `<span class="badge badge-${GEWERK_BADGE[gewerk] || 'terminal'}">${escapeHtml(FUNCTION_LABELS[func] || func)}</span>`
+    : `<span style="color:var(--text-tertiary);">–</span>`;
+  return `
+    <tr class="${relevant ? '' : 'row-dimmed'}" data-id="${item.id}">
+      <td data-field="type"><span class="badge badge-${escapeHtml(type)}">${escapeHtml(ELEMENT_LABELS[type] || type)}</span></td>
+      <td data-field="gewerk" style="font-size:12px;">${gewerk ? escapeHtml(GEWERK_LABELS[gewerk] || gewerk) : '–'}</td>
+      <td data-field="function">${funcBadge}</td>
+      <td data-field="name" style="font-size:12px;">${escapeHtml(item.element?.name || '–')}</td>
+      <td data-field="level">${escapeHtml(item.level || '–')}</td>
+      <td data-field="room" style="font-size:12px;">${escapeHtml(item.room || '–')}</td>
+      <td data-field="groups" style="font-size:11px;color:var(--text-secondary);">${escapeHtml((item.groupIds || []).join(', ')) || '–'}</td>
+      <td class="row-actions">
+        <button class="icon-btn" onclick="openDeviceModal('${item.id}')">Bearbeiten</button>
+        <button class="icon-btn" onclick="toggleKnxRelevant('${item.id}')">${relevant ? 'Ausblenden' : 'Einblenden'}</button>
+      </td>
+    </tr>`;
+}
+
+// Bucket-Reihenfolge kommt aus PROJECT.roomStructure (Ticket 7) statt Alphabet - behebt
+// nebenbei dasselbe "10.OG vor 2.OG"-Problem, das floorRank() für die KNX-Objektindex-
+// Vergabe schon lange löst, die Tabelle bisher aber nie hatte. Sortierung INNERHALB
+// einer Gruppe bleibt unverändert über deviceSort (items kommt hier schon vorsortiert an).
+function renderGroupedDeviceRows(items) {
+  const buckets = new Map();
+  const bucketOrder = [];
+
+  const keyFor = item => deviceGroupBy === 'level'
+    ? (item.level || 'Unbekannt')
+    : `${item.level || 'Unbekannt'}||${item.room || '(ohne Raum)'}`;
+  const labelFor = key => deviceGroupBy === 'level' ? key : key.split('||').join(' – ');
+
+  (PROJECT.roomStructure || []).forEach(floor => {
+    if (deviceGroupBy === 'level') {
+      bucketOrder.push(floor.name);
+    } else {
+      floor.rooms.forEach(room => bucketOrder.push(`${floor.name}||${room.name}`));
+      bucketOrder.push(`${floor.name}||(ohne Raum)`);
+    }
+  });
+
+  items.forEach(item => {
+    const key = keyFor(item);
+    if (!buckets.has(key)) { buckets.set(key, []); if (!bucketOrder.includes(key)) bucketOrder.push(key); }
+    buckets.get(key).push(item);
+  });
+
+  return bucketOrder.filter(key => buckets.has(key)).map(key => {
+    const bucketItems = buckets.get(key);
+    return `<tr><td colspan="8" style="font-weight:600;font-size:12px;background:var(--bg-secondary);padding:6px 8px;">${escapeHtml(labelFor(key))} (${bucketItems.length})</td></tr>`
+      + bucketItems.map(deviceRowHtml).join('');
+  }).join('');
+}
+
+// ── Raum-/Geschossstruktur (Baumansicht + Editor, Ticket 7) ──────────────────
+// PROJECT.roomStructure ist eine zu PROJECT.items PARALLELE Registry: maßgeblich dafür,
+// welche Etagen/Räume existieren (auch mit null Geräten) und in welcher Reihenfolge -
+// PROJECT.items bleibt weiterhin per Namensgleichheit (item.level/item.room) die alleinige
+// Quelle dafür, welches Gerät in welchem Raum steht (siehe dm-level/dm-room im Geräte-
+// Modal, jetzt Dropdowns statt Freitext, Quelle ist ebendiese Struktur). Objekte einem
+// anderen Raum/Geschoss zuordnen geht weiterhin auch direkt über das Bearbeiten-Modal.
 function toggleRoomTree() {
   const el = document.getElementById('room-tree');
   const show = el.style.display === 'none';
@@ -2598,108 +2840,273 @@ function renderRoomTree() {
   const el = document.getElementById('room-tree');
   if (!el || el.style.display === 'none' || !PROJECT) return;
 
-  const byFloor = {};
+  // Item-Zahlen je Etage/Raum weiterhin per Namensgleichheit aus PROJECT.items
+  // abgeleitet (wie schon vor der Raumstruktur) - PROJECT.roomStructure liefert nur,
+  // WAS es an Etagen/Räumen gibt und in welcher Reihenfolge, nicht wer dort wohnt.
+  const itemsByFloor = {};
   PROJECT.items.forEach(i => {
     const floor = i.level || 'Unbekannt';
     const room  = i.room || '(ohne Raum)';
-    if (!byFloor[floor]) byFloor[floor] = {};
-    if (!byFloor[floor][room]) byFloor[floor][room] = [];
-    byFloor[floor][room].push(i);
+    if (!itemsByFloor[floor]) itemsByFloor[floor] = {};
+    if (!itemsByFloor[floor][room]) itemsByFloor[floor][room] = [];
+    itemsByFloor[floor][room].push(i);
   });
 
   // Baut mit textContent/DOM-APIs statt innerHTML-Templating, weil Geschoss-/Raumnamen
-  // freier Text aus dem Jetplan-Import sind (anders als z.B. item.id) - so kann kein
-  // Anführungszeichen/HTML in einem Namen aus einem onclick-String ausbrechen.
+  // freier Text sind (anders als z.B. item.id) - so kann kein Anführungszeichen/HTML in
+  // einem Namen aus einem onclick-String ausbrechen. Die neuen Buttons unten schließen
+  // floor.id/room.id sogar direkt als Closure ein statt sie überhaupt zu interpolieren.
   el.innerHTML = '';
-  Object.entries(byFloor).forEach(([floor, rooms]) => {
-    const floorCount = Object.values(rooms).reduce((n, arr) => n + arr.length, 0);
+
+  const addFloorBtn = document.createElement('button');
+  addFloorBtn.className = 'btn btn-sm';
+  addFloorBtn.style.marginBottom = '10px';
+  addFloorBtn.textContent = '+ Etage';
+  addFloorBtn.onclick = () => addFloor();
+  el.appendChild(addFloorBtn);
+
+  (PROJECT.roomStructure || []).forEach((floor, floorIdx, floors) => {
+    const floorRooms = itemsByFloor[floor.name] || {};
+    const floorCount = Object.values(floorRooms).reduce((n, arr) => n + arr.length, 0);
 
     const floorDetails = document.createElement('details');
     floorDetails.style.marginBottom = '6px';
     const floorSummary = document.createElement('summary');
     floorSummary.style.fontSize = '13px';
     floorSummary.style.fontWeight = '500';
-    floorSummary.append(`${floor} (${floorCount}) `);
+    floorSummary.append(`${floor.name} (${floorCount}) `);
+
+    const floorUpBtn = document.createElement('button');
+    floorUpBtn.className = 'icon-btn';
+    floorUpBtn.style.marginLeft = '8px';
+    floorUpBtn.textContent = '▲';
+    floorUpBtn.disabled = floorIdx === 0;
+    floorUpBtn.onclick = e => { e.preventDefault(); moveFloor(floor.id, -1); };
+    floorSummary.appendChild(floorUpBtn);
+
+    const floorDownBtn = document.createElement('button');
+    floorDownBtn.className = 'icon-btn';
+    floorDownBtn.textContent = '▼';
+    floorDownBtn.disabled = floorIdx === floors.length - 1;
+    floorDownBtn.onclick = e => { e.preventDefault(); moveFloor(floor.id, 1); };
+    floorSummary.appendChild(floorDownBtn);
+
     const floorRenameBtn = document.createElement('button');
     floorRenameBtn.className = 'icon-btn';
     floorRenameBtn.style.marginLeft = '8px';
     floorRenameBtn.textContent = 'Umbenennen';
-    floorRenameBtn.onclick = e => { e.preventDefault(); renameFloor(floor); };
+    floorRenameBtn.onclick = e => { e.preventDefault(); renameFloor(floor.id); };
     floorSummary.appendChild(floorRenameBtn);
+
+    const addRoomBtn = document.createElement('button');
+    addRoomBtn.className = 'icon-btn';
+    addRoomBtn.style.marginLeft = '8px';
+    addRoomBtn.textContent = '+ Raum';
+    addRoomBtn.onclick = e => { e.preventDefault(); addRoom(floor.id); };
+    floorSummary.appendChild(addRoomBtn);
+
+    const floorDeleteBtn = document.createElement('button');
+    floorDeleteBtn.className = 'icon-btn';
+    floorDeleteBtn.style.marginLeft = '8px';
+    floorDeleteBtn.textContent = 'Löschen';
+    floorDeleteBtn.onclick = e => { e.preventDefault(); deleteFloor(floor.id); };
+    floorSummary.appendChild(floorDeleteBtn);
+
     floorDetails.appendChild(floorSummary);
 
     const roomsContainer = document.createElement('div');
     roomsContainer.style.paddingLeft = '1.25rem';
 
-    Object.entries(rooms).forEach(([room, roomItems]) => {
-      const roomDetails = document.createElement('details');
-      roomDetails.style.margin = '4px 0';
-      const roomSummary = document.createElement('summary');
-      roomSummary.style.fontSize = '12px';
-      roomSummary.style.color = 'var(--text-secondary)';
-      roomSummary.append(`${room} (${roomItems.length}) `);
-      const roomRenameBtn = document.createElement('button');
-      roomRenameBtn.className = 'icon-btn';
-      roomRenameBtn.style.marginLeft = '8px';
-      roomRenameBtn.textContent = 'Umbenennen';
-      roomRenameBtn.onclick = e => { e.preventDefault(); renameRoom(floor, room); };
-      roomSummary.appendChild(roomRenameBtn);
-      roomDetails.appendChild(roomSummary);
-
-      const ul = document.createElement('ul');
-      ul.style.paddingLeft = '1.25rem';
-      roomItems.forEach(i => {
-        const li = document.createElement('li');
-        li.style.fontSize = '12px';
-        li.style.padding = '2px 0';
-        li.textContent = `${ELEMENT_LABELS[i.element?.type] || i.element?.type || '–'}: ${i.element?.name || '–'}`;
-        li.onclick = () => openDeviceModal(i.id);
-        ul.appendChild(li);
-      });
-      roomDetails.appendChild(ul);
-      roomsContainer.appendChild(roomDetails);
+    floor.rooms.forEach((room, roomIdx, rooms) => {
+      const roomItems = floorRooms[room.name] || [];
+      roomsContainer.appendChild(renderRoomEntry(floor, room, roomItems, roomIdx === 0, roomIdx === rooms.length - 1));
     });
+
+    // Items mit leerem Raumnamen sind bewusst kein echter Raumstruktur-Eintrag (siehe
+    // reconcileRoomStructure()) - trotzdem sichtbar, aber ohne Umbenennen/Löschen/Reorder.
+    const unassigned = floorRooms['(ohne Raum)'];
+    if (unassigned?.length) {
+      roomsContainer.appendChild(renderRoomEntry(floor, { id: null, name: '(ohne Raum)' }, unassigned, true, true));
+    }
 
     floorDetails.appendChild(roomsContainer);
     el.appendChild(floorDetails);
   });
 }
 
-function renameFloor(oldLabel) {
-  const newLabel = (prompt('Neuer Geschoss-Name:', oldLabel) || '').trim();
-  if (!newLabel || newLabel === oldLabel) return;
-  PROJECT.items.forEach(i => { if ((i.level || 'Unbekannt') === oldLabel) i.level = newLabel; });
+// room.id === null markiert den Pseudo-Raum "(ohne Raum)" - dafür keine Umbenennen/
+// Löschen/Reorder-Buttons, da er kein echter roomStructure-Eintrag ist.
+function renderRoomEntry(floor, room, roomItems, isFirst, isLast) {
+  const roomDetails = document.createElement('details');
+  roomDetails.style.margin = '4px 0';
+  const roomSummary = document.createElement('summary');
+  roomSummary.style.fontSize = '12px';
+  roomSummary.style.color = 'var(--text-secondary)';
+  roomSummary.append(`${room.name} (${roomItems.length}) `);
+
+  if (room.id) {
+    const roomUpBtn = document.createElement('button');
+    roomUpBtn.className = 'icon-btn';
+    roomUpBtn.style.marginLeft = '8px';
+    roomUpBtn.textContent = '▲';
+    roomUpBtn.disabled = isFirst;
+    roomUpBtn.onclick = e => { e.preventDefault(); moveRoom(floor.id, room.id, -1); };
+    roomSummary.appendChild(roomUpBtn);
+
+    const roomDownBtn = document.createElement('button');
+    roomDownBtn.className = 'icon-btn';
+    roomDownBtn.textContent = '▼';
+    roomDownBtn.disabled = isLast;
+    roomDownBtn.onclick = e => { e.preventDefault(); moveRoom(floor.id, room.id, 1); };
+    roomSummary.appendChild(roomDownBtn);
+
+    const roomRenameBtn = document.createElement('button');
+    roomRenameBtn.className = 'icon-btn';
+    roomRenameBtn.style.marginLeft = '8px';
+    roomRenameBtn.textContent = 'Umbenennen';
+    roomRenameBtn.onclick = e => { e.preventDefault(); renameRoom(floor.id, room.id); };
+    roomSummary.appendChild(roomRenameBtn);
+
+    const roomDeleteBtn = document.createElement('button');
+    roomDeleteBtn.className = 'icon-btn';
+    roomDeleteBtn.style.marginLeft = '8px';
+    roomDeleteBtn.textContent = 'Löschen';
+    roomDeleteBtn.onclick = e => { e.preventDefault(); deleteRoom(floor.id, room.id); };
+    roomSummary.appendChild(roomDeleteBtn);
+  }
+
+  roomDetails.appendChild(roomSummary);
+
+  const ul = document.createElement('ul');
+  ul.style.paddingLeft = '1.25rem';
+  roomItems.forEach(i => {
+    const li = document.createElement('li');
+    li.style.fontSize = '12px';
+    li.style.padding = '2px 0';
+    li.textContent = `${ELEMENT_LABELS[i.element?.type] || i.element?.type || '–'}: ${i.element?.name || '–'}`;
+    li.onclick = () => openDeviceModal(i.id);
+    ul.appendChild(li);
+  });
+  roomDetails.appendChild(ul);
+  return roomDetails;
+}
+
+function addFloor() {
+  const name = (prompt('Name der neuen Etage:') || '').trim();
+  if (!name) return;
+  if (PROJECT.roomStructure.some(f => f.name === name)) { alert('Diese Etage gibt es schon.'); return; }
+  PROJECT.roomStructure.push({ id: newStructureId('floor'), name, rooms: [] });
   rebuild();
   renderAll();
   persistProject();
 }
 
-function renameRoom(floor, oldRoom) {
-  const newRoom = (prompt('Neuer Raum-Name:', oldRoom === '(ohne Raum)' ? '' : oldRoom) || '').trim();
-  if (!newRoom || newRoom === oldRoom) return;
+function addRoom(floorId) {
+  const floor = PROJECT.roomStructure.find(f => f.id === floorId);
+  if (!floor) return;
+  const name = (prompt('Name des neuen Raums:') || '').trim();
+  if (!name) return;
+  if (floor.rooms.some(r => r.name === name)) { alert('Diesen Raum gibt es in dieser Etage schon.'); return; }
+  floor.rooms.push({ id: newStructureId('room'), name });
+  rebuild();
+  renderAll();
+  persistProject();
+}
+
+function renameFloor(floorId) {
+  const floor = PROJECT.roomStructure.find(f => f.id === floorId);
+  if (!floor) return;
+  const newLabel = (prompt('Neuer Geschoss-Name:', floor.name) || '').trim();
+  if (!newLabel || newLabel === floor.name) return;
+  const oldLabel = floor.name;
+  PROJECT.items.forEach(i => { if ((i.level || 'Unbekannt') === oldLabel) i.level = newLabel; });
+  floor.name = newLabel;
+  rebuild();
+  renderAll();
+  persistProject();
+}
+
+function renameRoom(floorId, roomId) {
+  const floor = PROJECT.roomStructure.find(f => f.id === floorId);
+  const room  = floor?.rooms.find(r => r.id === roomId);
+  if (!room) return;
+  const newRoom = (prompt('Neuer Raum-Name:', room.name) || '').trim();
+  if (!newRoom || newRoom === room.name) return;
+  const oldRoom = room.name;
   PROJECT.items.forEach(i => {
-    if ((i.level || 'Unbekannt') === floor && (i.room || '(ohne Raum)') === oldRoom) i.room = newRoom;
+    if ((i.level || 'Unbekannt') === floor.name && (i.room || '') === oldRoom) i.room = newRoom;
   });
+  room.name = newRoom;
+  rebuild();
+  renderAll();
+  persistProject();
+}
+
+function deleteFloor(floorId) {
+  const floor = PROJECT.roomStructure.find(f => f.id === floorId);
+  if (!floor) return;
+  const stillUsed = PROJECT.items.some(i => (i.level || 'Unbekannt') === floor.name);
+  if (stillUsed) { alert('Erst Geräte verschieben oder löschen — diese Etage wird noch von Geräten verwendet.'); return; }
+  if (!confirm(`Etage "${floor.name}" wirklich löschen?`)) return;
+  PROJECT.roomStructure = PROJECT.roomStructure.filter(f => f.id !== floorId);
+  rebuild();
+  renderAll();
+  persistProject();
+}
+
+function deleteRoom(floorId, roomId) {
+  const floor = PROJECT.roomStructure.find(f => f.id === floorId);
+  const room  = floor?.rooms.find(r => r.id === roomId);
+  if (!room) return;
+  const stillUsed = PROJECT.items.some(i => (i.level || 'Unbekannt') === floor.name && (i.room || '') === room.name);
+  if (stillUsed) { alert('Erst Geräte verschieben oder löschen — dieser Raum wird noch von Geräten verwendet.'); return; }
+  if (!confirm(`Raum "${room.name}" wirklich löschen?`)) return;
+  floor.rooms = floor.rooms.filter(r => r.id !== roomId);
+  rebuild();
+  renderAll();
+  persistProject();
+}
+
+function moveFloor(floorId, dir) {
+  const idx = PROJECT.roomStructure.findIndex(f => f.id === floorId);
+  const newIdx = idx + dir;
+  if (idx < 0 || newIdx < 0 || newIdx >= PROJECT.roomStructure.length) return;
+  [PROJECT.roomStructure[idx], PROJECT.roomStructure[newIdx]] = [PROJECT.roomStructure[newIdx], PROJECT.roomStructure[idx]];
+  rebuild();
+  renderAll();
+  persistProject();
+}
+
+function moveRoom(floorId, roomId, dir) {
+  const floor = PROJECT.roomStructure.find(f => f.id === floorId);
+  if (!floor) return;
+  const idx = floor.rooms.findIndex(r => r.id === roomId);
+  const newIdx = idx + dir;
+  if (idx < 0 || newIdx < 0 || newIdx >= floor.rooms.length) return;
+  [floor.rooms[idx], floor.rooms[newIdx]] = [floor.rooms[newIdx], floor.rooms[idx]];
   rebuild();
   renderAll();
   persistProject();
 }
 
 // ── Device edit modal ────────────────────────────────────────────────────────
-// Baut die <option>-Liste von #dm-gewerk neu auf und wählt selectedValue (leer erlaubt).
-function populateGewerkOptions(selectedValue) {
-  const sel = document.getElementById('dm-gewerk');
+// targetEl optional (Default: das Modal-Feld) - der Inline-Editor in der Geräteliste
+// (Ticket 1) übergibt stattdessen sein eigenes, frisch erzeugtes <select>, damit Modal
+// und Inline-Editor dieselbe Optionslisten-Logik teilen statt sie doppelt zu pflegen.
+// Baut die <option>-Liste neu auf und wählt selectedValue (leer erlaubt).
+function populateGewerkOptions(selectedValue, targetEl) {
+  const sel = targetEl || document.getElementById('dm-gewerk');
   sel.innerHTML = '<option value="">– kein Gewerk (nicht KNX-gesteuert) –</option>' +
     Object.keys(GA_SCHEME).map(g => `<option value="${g}">${GEWERK_LABELS[g]}</option>`).join('');
   sel.value = selectedValue || '';
 }
 
-// Baut die <option>-Liste von #dm-function passend zum gewählten Gewerk neu auf. Eine
-// gespeicherte Funktion, die nicht (mehr) im Katalog des Gewerks steht (z.B. Altdaten
-// nach einer Katalog-Änderung), wird nicht stillschweigend verworfen, sondern als
-// zusätzliche Option angehängt.
-function populateFunctionOptions(gewerk, selectedValue) {
-  const sel = document.getElementById('dm-function');
+// Baut die <option>-Liste passend zum gewählten Gewerk neu auf. Eine gespeicherte
+// Funktion, die nicht (mehr) im Katalog des Gewerks steht (z.B. Altdaten nach einer
+// Katalog-Änderung), wird nicht stillschweigend verworfen, sondern als zusätzliche
+// Option angehängt.
+function populateFunctionOptions(gewerk, selectedValue, targetEl) {
+  const sel = targetEl || document.getElementById('dm-function');
   const functions = gewerk ? (FUNCTION_CATALOG[gewerk] || []) : [];
   sel.innerHTML = '<option value="">– keine –</option>' +
     functions.map(f => `<option value="${f}">${FUNCTION_LABELS[f] || f}</option>`).join('');
@@ -2711,6 +3118,36 @@ function populateFunctionOptions(gewerk, selectedValue) {
 
 function onDeviceGewerkChange() {
   populateFunctionOptions(document.getElementById('dm-gewerk').value, '');
+}
+
+// Baut die <option>-Liste aus PROJECT.roomStructure (siehe Ticket 7) neu auf. Ein
+// gespeicherter Wert, der (noch) nicht in der Struktur steht - z.B. der kurze Moment
+// zwischen einer manuellen Änderung und dem nächsten rebuild() - wird nicht verworfen,
+// sondern als zusätzliche Option angehängt, wie schon bei populateFunctionOptions() oben.
+function populateLevelOptions(selectedValue, targetEl) {
+  const sel = targetEl || document.getElementById('dm-level');
+  const floors = PROJECT.roomStructure || [];
+  sel.innerHTML = floors.map(f => `<option value="${escapeHtml(f.name)}">${escapeHtml(f.name)}</option>`).join('');
+  if (selectedValue && !floors.some(f => f.name === selectedValue)) {
+    sel.insertAdjacentHTML('beforeend', `<option value="${escapeHtml(selectedValue)}">${escapeHtml(selectedValue)} (nicht in der Raumstruktur)</option>`);
+  }
+  sel.value = selectedValue || floors[0]?.name || '';
+}
+
+// Kaskadiert von der gewählten Etage, gleiches defensives Muster wie oben.
+function populateRoomOptions(levelName, selectedValue, targetEl) {
+  const sel = targetEl || document.getElementById('dm-room');
+  const rooms = (PROJECT.roomStructure || []).find(f => f.name === levelName)?.rooms || [];
+  sel.innerHTML = '<option value="">– kein Raum –</option>' +
+    rooms.map(r => `<option value="${escapeHtml(r.name)}">${escapeHtml(r.name)}</option>`).join('');
+  if (selectedValue && !rooms.some(r => r.name === selectedValue)) {
+    sel.insertAdjacentHTML('beforeend', `<option value="${escapeHtml(selectedValue)}">${escapeHtml(selectedValue)} (nicht in der Raumstruktur)</option>`);
+  }
+  sel.value = selectedValue || '';
+}
+
+function onDeviceLevelChange() {
+  populateRoomOptions(document.getElementById('dm-level').value, '');
 }
 
 // Schlägt beim Wechsel des Jetplan-Typs ein passendes Gewerk vor (z.B. Beleuchtung).
@@ -2734,8 +3171,8 @@ function openDeviceModal(id) {
     delBtn.style.display = 'inline-flex';
     document.getElementById('dm-type').value     = item.element?.type || 'lighting';
     document.getElementById('dm-name').value     = item.element?.name || '';
-    document.getElementById('dm-level').value    = item.level || '';
-    document.getElementById('dm-room').value     = item.room || '';
+    populateLevelOptions(item.level || '');
+    populateRoomOptions(document.getElementById('dm-level').value, item.room || '');
     document.getElementById('dm-fuse').value     = item.fuse || '';
     document.getElementById('dm-groups').value   = (item.groupIds || []).join(', ');
     populateGewerkOptions(item.knxGewerk || effectiveGewerk(item) || '');
@@ -2745,8 +3182,8 @@ function openDeviceModal(id) {
     delBtn.style.display = 'none';
     document.getElementById('dm-type').value     = 'lighting';
     document.getElementById('dm-name').value     = '';
-    document.getElementById('dm-level').value    = activeFloorDevice !== 'all' ? activeFloorDevice : '';
-    document.getElementById('dm-room').value     = '';
+    populateLevelOptions(activeFloorDevice !== 'all' ? activeFloorDevice : '');
+    populateRoomOptions(document.getElementById('dm-level').value, '');
     document.getElementById('dm-fuse').value     = '';
     document.getElementById('dm-groups').value   = '';
     const suggested = defaultGewerkFor('lighting', '');
@@ -3089,7 +3526,8 @@ function exportProjectState() {
       projects: [PROJECT.project],
       units: [PROJECT.unit],
       outletItems: PROJECT.items,
-      switches: PROJECT.switches || []
+      switches: PROJECT.switches || [],
+      roomStructure: PROJECT.roomStructure || []
     }
   };
   download(`knx-projektstand-${PROJECT.project?.name || 'projekt'}.json`, JSON.stringify(payload, null, 2), 'application/json;charset=utf-8');
